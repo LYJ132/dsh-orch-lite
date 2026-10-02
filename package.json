@@ -1,0 +1,38 @@
+{
+  "name": "dsh-orch-lite",
+  "version": "1.0.2",
+  "description": "Agent preset that keeps the main session coordinating: one continuable agent per feature branch, worktree isolation only when workers run concurrently (solo lane protected by synchronous pending slots), one-shot explore agents for read-only sweeps, lazy git-repo bootstrap for write work in a fresh folder; main-session writes and mutating shells are denied, every decision written to $DSH_HOME/orch-lite/audit.log. The two manuals are published globally so every preset can read them, while the tools stay scoped to this preset.",
+  "type": "module",
+  "main": "lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./skills": "./lib/skills.js"
+  },
+  "files": [
+    "lib",
+    "skills",
+    "presets",
+    "README.md",
+    "CHANGELOG.md",
+    "DEVLOG.md"
+  ],
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "agent-preset",
+    "orchestration",
+    "worktree"
+  ],
+  "scripts": {
+    "test": "node test/plugin.test.mjs ."
+  },
+  "license": "MIT",
+  "private": true,
+  "dsh": {
+    "bundle": {
+      "patch": [
+        "./presets/orch-lite.patch.yml"
+      ]
+    }
+  }
+}
