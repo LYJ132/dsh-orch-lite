@@ -27,7 +27,15 @@
     "test": "node test/plugin.test.mjs ."
   },
   "license": "MIT",
-  "private": true,
+  "author": "LIN_YU_JIAN <linyujian1561@outlook.com>",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/LYJ132/dsh-orch-lite.git"
+  },
+  "bugs": {
+    "url": "https://github.com/LYJ132/dsh-orch-lite/issues"
+  },
+  "homepage": "https://github.com/LYJ132/dsh-orch-lite#readme",
   "dsh": {
     "bundle": {
       "patch": [
