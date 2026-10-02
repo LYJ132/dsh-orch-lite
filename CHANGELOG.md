@@ -4,6 +4,20 @@ All notable changes to this bundle. Rationale for each decision lives in `DEVLOG
 the short form. Dates are omitted on purpose — the project is developed in a single continuous line
 and `DEVLOG.md` carries the ordering.
 
+## Unreleased — repository hygiene (no runtime change)
+
+- The development docs were re-read against the shipped code and three stale claims were corrected:
+  the port appendix no longer calls isolation "always-worktree" (lazy isolation has been the rule
+  since v0.4), the test-harness note reports the current 109/109 checks instead of 62, and the
+  install note describes the tarball install this profile uses as well as a directory install.
+- The repository's version line is now self-describing: `v1.0.2` tags the commit the packed 1.0.2
+  artifact was built from. `v1.0.0` / `v1.0.1` have no reachable commit after the history rebuild and
+  are deliberately untagged.
+- **Known gap, left open on purpose**: the installed `dsh-orch-lite-1.0.2.tgz` predates the LICENSE
+  file and the npm metadata (12 files, `"private": true`), while the repository packs 13 files
+  without that flag. The same version number is not re-cut silently; closing the gap belongs to the
+  next version bump.
+
 ## 1.0.2 — renamed to `dsh-orch-lite`
 
 - **The package name lost its `@local/` scope.** `@local/` was a leftover from the ad-hoc local

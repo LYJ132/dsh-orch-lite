@@ -4,6 +4,40 @@ Decision history and rationale for this plugin. Plugin code, skills, prompts,
 and tool messages carry only current rules and runtime facts; the "why we did
 it this way" lives here.
 
+## 2026-10-02 — documentation drift, tags, repository hygiene (no version change)
+
+Re-read of the shipped docs against the shipped code after the history rebuild.
+Three claims were stale and are corrected in place; everything else was
+re-verified rather than assumed:
+
+- **"Always-worktree for write tasks"** in the port appendix below described the
+  v0.2/v0.3 policy. Isolation has been lazy since v0.4 — the only live worker runs
+  in the primary tree on its own `feature/<feature_id>`, every additional
+  concurrent worker gets `.worktrees/<feature_id>/` — and the appendix bullet is
+  rewritten to the shipped behaviour.
+- **"62 checks"** in the test-harness note: the suite reports 109/109 (the host
+  skills row, packaging invariants, repository bootstrap and audit trail were
+  added after that count was written).
+- **"installation materializes the package as a `link:`"**: true for a directory
+  install, not for the tarball install this profile actually uses
+  (`file:…/dist/dsh-orch-lite-1.0.2.tgz`, a real directory, no symlink). Both
+  forms are now stated.
+
+**Tags.** `git tag` was empty although three versions had shipped, so the
+version line was not self-describing and a reader could not tell which tree a
+release meant. `v1.0.2` now marks `bf01dcb` — the tree the packed 1.0.2 artifact
+was built from (`"private": true`, no npm metadata). `v1.0.0` and `v1.0.1` have
+no reachable commit: their history was discarded in the rebuild and survives only
+in `temp/history-backup-20261002.bundle`, so they are deliberately left untagged
+rather than pointed at an unrelated commit.
+
+**Known packaging gap (open, deliberate).** The installed tarball was packed
+before the LICENSE file and the npm metadata existed: it carries 12 files with
+`"private": true`, while the repository now packs 13 files (`LICENSE` included)
+without that flag. Re-cutting the same version silently is exactly what this
+project refuses to do, so the gap is left for the next version bump instead of
+being patched in place.
+
 ## v1.0.2 — the package name loses its `@local/` scope
 
 Owner question: "why do I still see `@local/`?" The answer is that it was an identity artefact, not
@@ -490,6 +524,11 @@ The original lived at `~/.zcode/cli/plugins/cache/orch-lite/…/1.2.0`
 `.orch-lite/index.json` state files). Ported clauses that DSH's port had
 diluted — all now present in the PROTOCOL section and the orch-lite skill:
 
+> Re-verified against the shipped code on 2026-10-02: the isolation bullet below
+> was still describing the v0.2/v0.3 always-worktree policy, and the harness note
+> below counted 62 checks. Both are corrected in place — lazy isolation has been
+> the rule since v0.4, and the suite reports 109/109.
+
 - **Step-0 `[routing]` audit line**, first line of EVERY reply, three states
   (chat / task / orchestration) + "emitting it late is allowed, silence is
   the violation" + decomposition check (disjoint files + no named dependency
@@ -514,12 +553,17 @@ Deliberate DSH-specific deviations from the original:
   `doctor` pass were NOT ported: DSH's `list_agents()` + the shared task board
   already carry the live-agent state the index duplicated ("one string, three
   places" replaces index lookups). Lite stays lite.
-- **Always-worktree for write tasks** (v0.1 policy kept): the original used
-  lazy isolation (solo child works in the primary tree on a `feature/<fid>`
-  branch it checks out itself). In DSH every agent shares one session cwd and
-  the main session keeps reading the primary tree while children run — a
-  child's mid-task branch switch would blind the coordinator. Isolation per
-  write task is one `worktree add` call and makes the invariant absolute.
+- **Isolation is lazy, as in the original** (restored by v0.4 after v0.2/v0.3
+  briefly required a worktree for every write task; see § v0.4): the only live
+  worker runs in the primary tree and checks out `feature/<feature_id>` itself,
+  and every later concurrent worker gets `.worktrees/<feature_id>/`. Unlike the
+  original, the concurrency half is machine-enforced — the gate refuses a
+  worktree-less dispatch once another worker is live — and the solo lane is made
+  safe by three things the original lacked: synchronous pending slots that close
+  the dispatch race, a dirty-tree guard that reports STUCK instead of absorbing
+  edits it did not make, and `into` on `worktree_merge` (with the primary tree
+  parked on the feature branch, "whatever is checked out" is not a safe merge
+  target).
 - `run_in_background` gating was dropped: DSH subagents default to
   `backgroundMode: continuable`; a gate over a redundant flag can only
   misfire.
@@ -555,9 +599,12 @@ Deliberate DSH-specific deviations from the original:
   bundle: restart the host process, then open a NEW session; existing sessions
   keep the preset revision they started with.
 - `dsh.bundle.patch` in package.json points at
-  `presets/orch-lite.patch.yml`; installation materializes the package as a
-  `link:` in the profile's node_modules (verified
-  `profiles/desktop/node_modules/dsh-orch-lite → workspace`).
+  `presets/orch-lite.patch.yml`; installation materializes the package under the
+  profile's `node_modules/dsh-orch-lite` — as a link for a directory install, as
+  an extracted copy for a tarball or `git+…` install. The profile currently uses
+  the packed tarball (`file:…/dist/dsh-orch-lite-1.0.2.tgz`: a real directory,
+  no symlink), so editing these sources does not reach the running host until a
+  new pack is installed.
 
 ## Known silent-failure modes to check first if "nothing happens"
 
@@ -579,11 +626,13 @@ Deliberate DSH-specific deviations from the original:
 
 ## Test harness
 
-`test/plugin.test.mjs` (workspace, dev-only) drives the real plugin against
-a stubbed ctx (subprocess over execFile, fs over node:fs, registries + event
-bus mirroring scoped dispatch): 62 checks covering tool behavior, skill
-registration from bundled SKILL.md, boot injection, and all gate
-allow/deny paths. Run: `node test/plugin.test.mjs .`.
+`test/plugin.test.mjs` (dev-only: shipped in the repository, excluded from the
+pack by the `files` list) drives the real plugin against a stubbed ctx
+(subprocess over execFile, fs over node:fs, registries + event bus mirroring
+scoped dispatch): 109 checks covering tool behavior, all gate allow/deny paths,
+skill registration from the bundled manuals, the host skills row, boot
+injection, the packaging invariants, the repository bootstrap, and the audit
+trail. Run: `node test/plugin.test.mjs .`.
 
 ## Language policy
 

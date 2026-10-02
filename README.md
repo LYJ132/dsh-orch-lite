@@ -85,6 +85,9 @@ used for the 1.0.0 review.
 | `scripts/gen-preset.mjs` | regenerates the preset patch from the shipped `standard` preset, keeping the copied composition honest |
 | `test/plugin.test.mjs` | the self-contained check suite (`npm test`, or `node test/plugin.test.mjs .`); excluded from the pack by the `files` list |
 | `DEVLOG.md` | decision history and rationale — the "why" behind every rule |
+| `CHANGELOG.md` | the short, user-visible change list; one section per released version |
+| `memory.md` | per-session development journal — what this repository's git history cannot record (working branch, blockers, next steps) |
+| `LICENSE` | MIT |
 
 ## Development loop
 
@@ -93,10 +96,11 @@ link, so editing these sources does **not** reach the running application. Itera
 
 ```powershell
 cd <this directory>
-npm test                        # 109 checks, self-contained
-npm pack --pack-destination ..  # produces local-dsh-orch-lite-<version>.tgz
+npm test                          # 109 checks, self-contained
+npm pack --dry-run                # preview the pack: 13 files, LICENSE included
+npm pack --pack-destination <dir> # produces dsh-orch-lite-<version>.tgz
 # then, from a session:
-plugin_manager install_bundle   target: file:<absolute path to the .tgz>
+plugin_manager install_bundle     target: file:<absolute path to the .tgz>
 ```
 
 Then **restart the host and open a new session** — bundle changes are read at profile load, and a
@@ -129,6 +133,6 @@ then optionally delete `.worktrees/`, the `feature/*` branches and
 ## License
 
 MIT — see [`LICENSE`](./LICENSE). The source is published at
-<https://github.com/LYJ132/dsh-orch-lite>. The package itself remains a local bundle
-(`"private": true`) — the flag blocks accidental registry publishing; directory and tarball
-installs are both supported.
+<https://github.com/LYJ132/dsh-orch-lite>. The manifest carries npm publishing metadata
+(`repository`, `author`, no `"private"` flag), but nothing has been published to a registry —
+installs run from a directory, a tarball or a `git+…` URL.
