@@ -59,3 +59,29 @@
 - 讨论过的 P0-A（commit trailer 规范 / `worktree_merge` 用 `--no-ff` / base 记录）与 P1（append-only ledger + `orch_index` 投影工具）待选定后实施
 
 ---
+
+### 2026-10-02 - v1.0.3：能力全局、强制按预设、单工具 orch_tool
+
+**当前分支**：main
+
+**已完成**：
+- 新需求落地：插件在**所有预设**可用。host 行（`lib/host.js`）现在同时注册两份手册**和** `orch_tool`（进 global layer，每个会话可见）；预设行（`lib/index.js`）只保留 protocol 段、boot 注入与门禁。
+- 三个工具合并为一个 `orch_tool({ action: create|merge|remove, feature_id, base?, into? })`；模块拆分：`lib/tool.js`（工具）、`lib/workspace.js`（仓库/工作区管道）、`lib/audit.js`（审计），原 `lib/skills.js` 删除并改名 `lib/host.js`，导出 `./host` 取代 `./skills`。
+- protocol 段的"工具不可见就渲染空串"守卫删除（工具已全局，守卫的唯一致命模式就是静默空段）。
+- 复用按 B 方案：分支是硬规则；唤醒 agent 只在会话的 `send_message` 收 `agent_id` 时可用，收 `target`（Teams 版）则视为不可续用、新派并把结论放进 `STILL VALID`。两份手册 + 协议段都写明了这条。
+- 新增 freshness 守卫测试：任何出厂文件不得再出现旧工具名；两份手册都在 8192 修剪线以内。
+- 测试 109 → **116/116 通过**；`presets/orch-lite.patch.yml` 与 `scripts/gen-preset.mjs` 同步（host 行 id `orch-lite-host`）。
+
+**遇到的问题及解决方案**：
+- 重跑生成器时发现 **DSH 的 standard preset 已经漂移**（新增 `tool-cordis`、`skill-filesystem.customSkillDirs`、persona 改成块标量等）。为了让本次提交的 diff 干净，先把补丁回退、只手工改我们自己的行；平台漂移的同步留作**单独一次提交**（下一步计划）。
+- 手册一度涨到 8489 字符，超过工具结果修剪线（8192）→ 压缩文案到 8178 以下。
+
+**注意事项**：
+- 工具在非 orch-lite 预设里**没有门禁**：纪律只是文档，这是本轮明确的取舍。
+- Teams 组合下 `send_message` 是 Team 版 → 续用不可用，属平台级同名工具遮蔽，本插件只做优雅降级，不做补救机制。
+
+**下一步计划**：
+- 单独提交一次"standard 组合刷新"（`node scripts/gen-preset.mjs <web-app 的 presets/cordis.patch.yml> presets/orch-lite.patch.yml`），并复核新增行是否影响我们。
+- 打包 1.0.3 → 安装到 profile → 重启宿主，然后按 README 的 9 步清单验收（重点第 9 步：别的预设里 `orch_tool` 是否真的可见）。
+
+---

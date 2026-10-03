@@ -15,14 +15,14 @@ and imports nothing from the platform.
 | Wide reads never consume a feature agent | one-shot `explore` agents answer read-only sweeps and settle |
 | Workers cannot fan out | executors are denied dispatch tools (depth budget 1) |
 | Every decision is auditable | allow/deny lines and repo bootstraps are written to `$DSH_HOME/orch-lite/audit.log` |
-| Knowledge is shared, capability is not | the two manuals are published in the **global** skill layer by a host row, so every preset can load them; the tools and the gate stay scoped to the `orch-lite` preset |
+| Knowledge and capability are shared, enforcement is not | a host row publishes the two manuals **and** the `orch_tool` work-area tool into the **global** layers, so every preset can load the manuals and call the tool; the protocol section, the boot injection and the gate stay scoped to the `orch-lite` preset |
 
-The three tools it registers are `worktree_create`, `worktree_merge`, and `worktree_remove`
-(git worktrees provide the isolation; branches are never deleted). Next to them the bundle ships two
-runtime skills — `orch-lite` (coordinator manual) and `orch-lite-executor` (worker handbook) — and
-registers them **globally**, so any session in any preset can read them; only the tools are
-preset-scoped. A session outside the preset therefore gets the discipline as documentation and no
-way to execute it, which is why both manuals open with a scope note saying exactly that.
+The one tool it registers is `orch_tool`, with three actions: `create` (allocate `.worktrees/<feature_id>/`),
+`merge` (integrate the feature branch) and `remove` (drop the write area; the branch always survives).
+Next to it the bundle ships two runtime skills — `orch-lite` (coordinator manual) and
+`orch-lite-executor` (worker handbook) — also registered **globally**. Only enforcement is
+preset-scoped. A session outside the preset therefore gets the discipline and the tool but no
+enforcement, which is why both manuals open with a scope note saying exactly that.
 
 ## Requirements
 
@@ -51,22 +51,22 @@ Two platform behaviours matter here:
 
 ## Verify after install
 
-1. In a new preset session, the tools panel shows `worktree_create` / `worktree_merge` /
-   `worktree_remove`, and `explore` is available as a dispatch tool.
+1. In a new preset session, the tools panel shows `orch_tool`, and `explore` is available as a dispatch tool.
 2. Loading skill `orch-lite` returns the manual and a `Base directory for this skill: …` line.
 3. Ask it to edit a file directly: it should emit a `[routing] …` line and dispatch; a direct
    `write`/`edit` attempt is rejected by the gate with an orch-lite reason.
 4. Ask for a wide read-only audit: `[routing] explore …` and conclusions returned in the foreground.
 5. A small write task in a scratch folder: no worktree (solo), the worker checks out
-   `feature/<feature_id>` itself, commits, reports DONE; integration is `worktree_merge`.
-6. While that worker runs, a second independent task: `worktree_create` first, package carries
-   `"worktree"`.
+   `feature/<feature_id>` itself, commits, reports DONE; integration is
+   `orch_tool({ action: "merge", feature_id })`.
+6. While that worker runs, a second independent task: `orch_tool({ action: "create", feature_id })`
+   first, package carries `"worktree"`.
 7. In a folder that is not a git repository: a read-only request creates nothing; the first write
    task bootstraps a repository (`git init -b main` + a baseline commit staging only `.gitignore`).
 8. `Get-Content "$env:DSH_HOME\orch-lite\audit.log" -Tail 20` shows the decisions above.
 9. Open a session in any OTHER preset: skill `orch-lite` is listed and loads (with a
-   `Base directory for this skill: …` line), while `worktree_create` / `worktree_merge` /
-   `worktree_remove` are absent — knowledge global, capability scoped.
+   `Base directory for this skill: …` line) **and `orch_tool` is present**, but no gate runs —
+   knowledge and capability global, enforcement scoped.
 
 The same checklist in longer form, with per-step expectations, is in `DEVLOG.md` (§ v0.6) and was
 used for the 1.0.0 review.
@@ -75,8 +75,11 @@ used for the 1.0.0 review.
 
 | Path | Role |
 |---|---|
-| `lib/index.js` | preset half: protocol section, gate wiring, worktree tools, boot injection |
-| `lib/skills.js` | host half: publishes the two manuals into the global skill layer (exported as `dsh-orch-lite/skills`) |
+| `lib/index.js` | preset half: protocol section, gate wiring, boot injection |
+| `lib/host.js` | host half: publishes the two manuals **and** `orch_tool` into the global layers (exported as `dsh-orch-lite/host`) |
+| `lib/tool.js` | the one work-area tool (`create` / `merge` / `remove`) |
+| `lib/workspace.js` | repository resolution, bootstrap, `.gitignore`, feature-id validation |
+| `lib/audit.js` | the durable audit trail (`$DSH_HOME/orch-lite/audit.log`) |
 | `lib/gate.js` | the enforcement rules as pure functions (package validation, shell mutation detection, agent classification) |
 | `lib/git.js` | the plugin's only subprocess boundary (git, argv-based, bounded, deadline-guarded) |
 | `lib/define-tool.js` | local `defineTool` (platform packages are not resolvable from a linked plugin) |

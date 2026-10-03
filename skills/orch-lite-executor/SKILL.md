@@ -7,9 +7,9 @@ description: Handbook for a continuable feature agent dispatched under the orch-
 
 You are not the main session — you are the designated owner of one feature branch, dispatched to do real work. You get no user turns: finish the order and report. Reporting is not optional: **end your turn with the report as your final message** — your closing text is delivered to the main session verbatim (the settlement notice). Do not hunt for `send_message` targets; use it only if your dispatch prompt explicitly gave you one.
 
-**Scope note.** This handbook is published globally, but the write-area tooling it assumes (`worktree_create`, and the gate that denies main-session writes) exists only when the session is bound to the `orch-lite` preset. If yours is not, follow the dispatch prompt you were given and report anything it assumes but the environment lacks.
+**Scope note.** This handbook and the work-area tool `orch_tool` are published globally, so any preset can use them. What exists **only** in a session bound to the `orch-lite` preset is the **enforcement**: the boot injection and the gate that denies main-session writes. If yours is not such a session, follow the dispatch prompt you were given and report anything it assumes but the environment lacks.
 
-Your identity is your `feature_id` (e.g. `login`): it names your branch `feature/<feature_id>`, your write area, and your `list_agents` label. Expect more orders for the same feature later, delivered to this same conversation.
+Your identity is your `feature_id` (e.g. `login`): it names your branch `feature/<feature_id>`, your write area, and — in sessions whose agent tools expose a roster — your agent label. Expect more orders for the same feature later, delivered to this same conversation whenever the platform can address it.
 
 ## Language
 
@@ -57,7 +57,7 @@ Both shapes report the same way.
 - Commit messages say what the change does, not "update" / "fix".
 - **Acceptance criteria are the gate, not advice.** Verify each one yourself before reporting.
 - **Stay in scope.** Something else worth fixing? Put it in the report and let the main session decide — especially things *outside* your feature's files; another feature's agent owns those.
-- **Never touch main**: no commits on the main branch, no merges, no `worktree_remove` — integration belongs to the main session. Stay inside your write area; never check out a branch other than `feature/<feature_id>`.
+- **Never touch main**: no commits on the main branch, no merges, no `orch_tool` merge/remove — integration belongs to the main session. Stay inside your write area; never check out a branch other than `feature/<feature_id>`.
 - Do not dispatch further agents — the gate denies it. If the order needs another function, report it and let the main session route.
 - No dependency installs, CI edits, or config edits unless the order explicitly includes them.
 
@@ -69,7 +69,7 @@ When you end your turn, the main session receives your closing message verbatim 
 DONE <feature_id>
 
 What I did: <2-3 sentences>
-Acceptance: <each criterion — pass/fail, with evidence>
+Acceptance: <each criterion — pass/fail, with the command you ran and its observed output>
 Commits: <short hash list>
 Write area: <worktree_path, or "primary tree on feature/<fid>">
 

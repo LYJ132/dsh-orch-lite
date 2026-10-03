@@ -4,6 +4,53 @@ Decision history and rationale for this plugin. Plugin code, skills, prompts,
 and tool messages carry only current rules and runtime facts; the "why we did
 it this way" lives here.
 
+## v1.0.3 — capability global, enforcement preset-scoped
+
+Owner requirement: "I want this plugin usable in every preset. The difference is that orch-lite
+injects at session start, while other presets require you to load the orch-lite skill explicitly —
+and then it uses the companion tools itself."
+
+That splits the bundle along one line: **what a session can do** versus **what a session is held
+to**. The split already existed for knowledge (v1.0.1 put the manuals in the global layer); this
+release moves capability to the same side and keeps enforcement where it was:
+
+| | `orch-lite` preset | any other preset |
+|---|---|---|
+| manuals | global layer (v1.0.1) | global layer |
+| `orch_tool` | global layer (v1.0.3) | global layer |
+| protocol section + boot injection | yes | no |
+| gate | yes | no — the manual says so |
+
+Mechanics, and why the tool moved: a host row's registrations land in the global layer, which every
+session's catalog merges (the platform's own comment calls the skill registry "host+per-scope
+layered — the tools-registry shape"), so `orch_tool` is registered by `lib/host.js`, next to the
+manuals. `lib/index.js` keeps the protocol section, the boot injection and the gate.
+
+**One tool, three actions.** `worktree_create` / `worktree_merge` / `worktree_remove` became
+`orch_tool({ action })`. Rationale, in the owner's terms: the tool is now visible in every session,
+so each extra schema is a tax on every request — one schema pays it once. The name is snake_case on
+purpose: a hyphenated name is an "exotic" identifier that PTC-mode SDK bindings must reach through
+bracket access, and this profile mounts `workflow-ptc`. The old render hint about
+`team_task_create` was dropped: the shared task board is not part of this preset's composition, so
+the tool was advertising something the session may well not have.
+
+**Continuation became conditional, honestly.** A tested platform composition (the Agent Teams
+bundle) registers its own `send_message` / `list_agents` / `interrupt_agent`, which shadow the
+subagent-control tools that address continuable children: `subagent` still returns an id, but the id
+is unaddressable, so "resume the agent" silently degrades into "never resume". The rule is therefore:
+the **branch** is the invariant (every order for a feature lands on `feature/<feature_id>`), while
+**waking the agent** happens only where the session's `send_message` takes `agent_id`. Where it takes
+`target`, the manual states continuation is unavailable and the order goes to a fresh agent with the
+surviving conclusions in `STILL VALID`. Nothing new is required of the model, and nothing fails
+silently.
+
+**The protocol section lost its scope guard.** It used to render `''` unless the work-area tool was
+visible in the caller's scope. With the tool global, visibility can no longer discriminate, and a
+guard whose only failure mode is a silently empty prompt section is worse than no guard: the section
+now renders whenever the row is mounted (i.e. whenever the preset is).
+
+Tool names in earlier DEVLOG sections are the pre-1.0.3 names; they are left as written.
+
 ## 2026-10-02 — documentation drift, tags, repository hygiene (no version change)
 
 Re-read of the shipped docs against the shipped code after the history rebuild.
@@ -610,11 +657,11 @@ Deliberate DSH-specific deviations from the original:
 
 (from the dsh-tools/dsh-system-prompt contracts; diagnostics when tripped)
 
-- Protocol section renders `''` when `worktree_create` is not visible in the
-  session's scope view: name mismatch, the `orch` row failed or is stuck
-  PENDING on a host service while other rows mounted, or the tool was
-  restricted by a permission preset. Check `plugin_manager list_plugins` row
-  states and start a fresh preset-bound session.
+- Protocol section missing entirely: the `orch` preset row failed to mount, or is stuck PENDING on
+  a host service while other rows mounted. (The old failure mode — a section that rendered `''`
+  because the work-area tool was invisible in the caller's scope — is gone: the section renders
+  unconditionally, and the tool is global now.) Check `plugin_manager list_plugins` row states and
+  start a fresh preset-bound session.
 - A section `text` callback must be SYNC (an async return breaks interpolation
   / silently drops) and must not contain `{{ }}` groups unless interpolated —
   both guarded here (`interpolate: false`).
@@ -629,10 +676,11 @@ Deliberate DSH-specific deviations from the original:
 `test/plugin.test.mjs` (dev-only: shipped in the repository, excluded from the
 pack by the `files` list) drives the real plugin against a stubbed ctx
 (subprocess over execFile, fs over node:fs, registries + event bus mirroring
-scoped dispatch): 109 checks covering tool behavior, all gate allow/deny paths,
-skill registration from the bundled manuals, the host skills row, boot
-injection, the packaging invariants, the repository bootstrap, and the audit
-trail. Run: `node test/plugin.test.mjs .`.
+scoped dispatch): 116 checks covering tool behavior, all gate allow/deny paths,
+skill registration from the bundled manuals, the host row, boot injection, the
+packaging invariants, the repository bootstrap, the audit trail, and freshness
+guards (no shipped file may still name the retired per-action tools; both
+manuals stay under the pruner threshold). Run: `node test/plugin.test.mjs .`.
 
 ## Language policy
 

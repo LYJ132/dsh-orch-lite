@@ -28,11 +28,12 @@ if (pkg === undefined) {
 const auditHome = mkdtempSync(join(tmpdir(), 'orch-home-'))
 process.env.DSH_HOME = auditHome
 
-// The bundle has two halves: the preset row (`lib/index.js` — tools, gate,
-// protocol) and the host row (`lib/skills.js` — the manuals, registered
-// globally so every preset can load them).
+// The bundle has two halves: the preset row (`lib/index.js` — protocol section,
+// boot injection, gate) and the host row (`lib/host.js` — the two manuals AND
+// the `orch_tool` work-area tool, registered globally so every preset can use
+// them).
 const presetHalf = await import(pathToFileURL(join(pkg, 'lib', 'index.js')).href)
-const skillsHalf = await import(pathToFileURL(join(pkg, 'lib', 'skills.js')).href)
+const hostHalf = await import(pathToFileURL(join(pkg, 'lib', 'host.js')).href)
 
 // ---------------------------------------------------------------- stub ctx
 
@@ -115,7 +116,7 @@ const ctx = {
 }
 
 presetHalf.apply(ctx)
-skillsHalf.apply(ctx)
+hostHalf.apply(ctx)
 
 // ------------------------------------------------------------------ helpers
 
@@ -166,6 +167,8 @@ await git(['worktree', 'add', join(root, '.worktrees', 'login'), '-b', 'feature/
 
 const exec = { signal: new AbortController().signal, agent: MAIN }
 const call = (name, args) => registered.get(name).execute(args, exec)
+// One tool, three actions: the work-area operations are all orch_tool.
+const callTool = (action, args) => registered.get('orch_tool').execute({ action, ...args }, exec)
 
 let passed = 0
 let failed = 0
@@ -189,11 +192,11 @@ const rejects = async (name, fn) => {
 
 // --- registration -----------------------------------------------------------
 
-check('three worktree tools registered', ['worktree_create', 'worktree_merge', 'worktree_remove'].every(n => registered.has(n)), [...registered.keys()].join(', '))
+check('the one work-area tool is registered by the host half', [...registered.keys()].join(',') === 'orch_tool', [...registered.keys()].join(', '))
+check('the tool takes the three actions', ['create', 'merge', 'remove'].every(a => registered.get('orch_tool').parameters.properties.action.enum.includes(a)))
 const protocol = sections.find(s => s.name === 'orch-lite:protocol')
 check('protocol section at order 2850, interpolate false', protocol?.order === 2850 && protocol?.interpolate === false)
-check('protocol renders inside the orch-lite scope', typeof protocol?.text === 'function' && protocol.text({ scope: 'orch-preset-mount' }).startsWith('# Mode: orch-lite'))
-check('protocol renders empty outside it', protocol?.text({ scope: 'some-other-scope' }) === '')
+check('protocol has no silent empty state (no scope guard)', typeof protocol?.text === 'function' && protocol.text({ scope: 'any-scope' }).startsWith('# Mode: orch-lite'))
 {
 	const body = protocol?.text({ scope: 'orch-preset-mount' }) ?? ''
 	check('protocol carries supremacy + routing audit', body.includes('## Supremacy') && body.includes('[routing] chat'))
@@ -206,8 +209,8 @@ check('protocol renders empty outside it', protocol?.text({ scope: 'some-other-s
 
 // --- skills -----------------------------------------------------------------
 
-check('the two halves inject different services', skillsHalf.inject.includes('skills') && !presetHalf.inject.includes('skills'), JSON.stringify({ preset: presetHalf.inject, skills: skillsHalf.inject }))
-check('the skills half names itself for the host row', skillsHalf.name === 'orch-lite-skills')
+check('the two halves inject different services', hostHalf.inject.includes('skills') && hostHalf.inject.includes('tools') && !presetHalf.inject.includes('skills'), JSON.stringify({ preset: presetHalf.inject, host: hostHalf.inject }))
+check('the host half names itself for the host row', hostHalf.name === 'orch-lite-host')
 check('both skills registered', skills.has('orch-lite') && skills.has('orch-lite-executor'), [...skills.keys()].join(', '))
 {
 	const s = skills.get('orch-lite')
@@ -221,21 +224,57 @@ check('both skills registered', skills.has('orch-lite') && skills.has('orch-lite
 	)
 }
 
-// --- packaging: the global-skills split must survive regenerate/repack ----------
+// --- freshness guards: shipped text must match the shipped tool ------------------
+
+{
+	const read = relative => readFileSync(join(pkg, ...relative.split('/')), 'utf8')
+	const shipped = [
+		'lib/index.js',
+		'lib/host.js',
+		'lib/tool.js',
+		'lib/workspace.js',
+		'lib/gate.js',
+		'skills/orch-lite/SKILL.md',
+		'skills/orch-lite-executor/SKILL.md',
+		'presets/orch-lite.patch.yml',
+	]
+	const stale = shipped.filter(relative => /worktree_(create|merge|remove)/.test(read(relative)))
+	check('no shipped file still names the retired per-action tools', stale.length === 0, stale.join(', '))
+	const manual = read('skills/orch-lite/SKILL.md')
+	const handbook = read('skills/orch-lite-executor/SKILL.md')
+	check('the coordinator manual stays under the pruner threshold', manual.length < 8192, String(manual.length))
+	check('the handbook stays under the pruner threshold', handbook.length < 8192, String(handbook.length))
+	check(
+		'both manuals state where enforcement exists (scope note)',
+		manual.includes('Only sessions bound to the `orch-lite` preset') &&
+			handbook.includes('only** in a session bound to the `orch-lite` preset'),
+	)
+	check(
+		'the manual makes continuation conditional on agent addressability',
+		manual.includes('takes `target`') && manual.includes('continuation is unavailable'),
+	)
+	const toolSource = read('lib/tool.js')
+	check(
+		'the tool description says it works outside the preset without enforcement',
+		toolSource.includes('nothing enforces the discipline'),
+	)
+}
+
+// --- packaging: the global skills+tool split must survive regenerate/repack -----
 
 {
 	const yml = readFileSync(join(pkg, 'presets', 'orch-lite.patch.yml'), 'utf8')
 	check(
-		'the preset patch carries the host skills row',
-		yml.includes('- id: orch-lite-skills') && yml.includes("'dsh-orch-lite/skills'"),
+		'the preset patch carries the host row',
+		yml.includes('- id: orch-lite-host') && yml.includes("'dsh-orch-lite/host'"),
 	)
 	check('the patch uses no tabs', !yml.includes('\t'))
 	check('the patch ends with a newline', yml.endsWith('\n'))
 	// indentation is the structure: 4 = insert-list entries, 10 = preset plugin rows
 	check('the preset row sits at the insert-list level', /^ {4}- id: preset-orch-lite$/m.test(yml))
 	check(
-		'the skills row is the preset row\'s sibling, not nested inside it',
-		/^ {4}- id: orch-lite-skills$/m.test(yml) && /^ {6}name: 'dsh-orch-lite\/skills'$/m.test(yml),
+		'the host row is the preset row\'s sibling, not nested inside it',
+		/^ {4}- id: orch-lite-host$/m.test(yml) && /^ {6}name: 'dsh-orch-lite\/host'$/m.test(yml),
 	)
 	check(
 		'our two rows sit inside the preset plugin list',
@@ -250,7 +289,7 @@ check('both skills registered', skills.has('orch-lite') && skills.has('orch-lite
 		`rows at 10 spaces: ${(yml.match(/^ {10}- id: /gm) ?? []).length}`,
 	)
 	const manifest = JSON.parse(readFileSync(join(pkg, 'package.json'), 'utf8'))
-	check('the manifest exports the skills subpath', manifest.exports?.['./skills'] === './lib/skills.js')
+	check('the manifest exports the host subpath', manifest.exports?.['./host'] === './lib/host.js')
 	check('the pack file list includes the module directory', Array.isArray(manifest.files) && manifest.files.includes('lib'))
 }
 check('no registration warnings', warnings.length === 0, warnings.join(' | '))
@@ -295,8 +334,8 @@ check('no registration warnings', warnings.length === 0, warnings.join(' | '))
 	check('gate denies output redirection to a file', out.decision?.kind === 'deny')
 	const install = await gate({ agent: MAIN, name: 'bash', arguments: { command: 'npm install left-pad' } })
 	check('gate denies package installs', install.decision?.kind === 'deny')
-	const mergeTool = await gate({ agent: MAIN, name: 'worktree_merge', arguments: { feature_id: 'login' } })
-	check('gate passes the integration tools', mergeTool.nextCalled)
+	const mergeTool = await gate({ agent: MAIN, name: 'orch_tool', arguments: { action: 'merge', feature_id: 'login' } })
+	check('gate passes the integration tool', mergeTool.nextCalled)
 }
 
 // --- gate: feature dispatch ----------------------------------------------------
@@ -428,20 +467,21 @@ check('no registration warnings', warnings.length === 0, warnings.join(' | '))
 
 // --- slug validation ----------------------------------------------------------
 
-await rejects('rejects a path-traversal feature_id', () => call('worktree_create', { feature_id: '../escape' }))
-await rejects('rejects an uppercase feature_id', () => call('worktree_create', { feature_id: 'FixLogin' }))
-await rejects('rejects a feature_id with a separator', () => call('worktree_create', { feature_id: 'a/b' }))
+await rejects('rejects a path-traversal feature_id', () => callTool('create', { feature_id: '../escape' }))
+await rejects('rejects an uppercase feature_id', () => callTool('create', { feature_id: 'FixLogin' }))
+await rejects('rejects a feature_id with a separator', () => callTool('create', { feature_id: 'a/b' }))
+await rejects('rejects an unknown action', () => callTool('frobnicate', { feature_id: 'login' }))
 
 // --- create (reuses the fixture worktree) / idempotence ------------------------
 
-const created = await call('worktree_create', { feature_id: 'login' })
+const created = await callTool('create', { feature_id: 'login' })
 check('create is idempotent on the live feature worktree', created.created === false && created.reused === true)
 check('worktree path follows the feature', created.worktree_path.endsWith('/.worktrees/login'), created.worktree_path)
 check('branch follows the feature', created.branch === 'feature/login', created.branch)
 
 // --- a new feature gets a fresh area -------------------------------------------
 
-const fresh = await call('worktree_create', { feature_id: 'docs' })
+const fresh = await callTool('create', { feature_id: 'docs' })
 check('a new feature creates its area', fresh.created === true && fresh.branch === 'feature/docs')
 check('fresh worktree directory exists', existsSync(join(root, '.worktrees', 'docs', 'app.js')))
 check('.gitignore gained .worktrees/', readFileSync(join(root, '.gitignore'), 'utf8').includes('.worktrees/'))
@@ -449,7 +489,7 @@ check('.gitignore gained .worktrees/', readFileSync(join(root, '.gitignore'), 'u
 // --- holder fallback when the branch lives elsewhere ----------------------------
 
 await git(['worktree', 'add', join(root, 'legacy-place'), '-b', 'feature/relocated', '-q'])
-const holder = await call('worktree_create', { feature_id: 'relocated' })
+const holder = await callTool('create', { feature_id: 'relocated' })
 // the standard path .worktrees/relocated does not exist as a registered worktree,
 // but the branch is already checked out elsewhere → reuse that path with a note
 check('create hands back the branch holder', holder.reused === true && holder.worktree_path.endsWith('legacy-place'), JSON.stringify(holder))
@@ -463,25 +503,25 @@ await git(['-C', join(root, '.worktrees', 'login'), 'add', '.'])
 await git(['-C', join(root, '.worktrees', 'login'), '-c', 'user.name=login', '-c', 'user.email=login@orch-lite.local', 'commit', '-qm', 'fix: colon handling'])
 
 writeFileSync(join(root, '.worktrees', 'login', 'dirty.txt'), 'x', 'utf8')
-const refused = await call('worktree_remove', { feature_id: 'login' })
+const refused = await callTool('remove', { feature_id: 'login' })
 check('remove refuses a dirty worktree', refused.removed === false && refused.dirty.includes('dirty.txt'), JSON.stringify(refused.dirty))
 rmSync(join(root, '.worktrees', 'login', 'dirty.txt'))
 
-const clean = await call('worktree_merge', { feature_id: 'login' })
+const clean = await callTool('merge', { feature_id: 'login' })
 check('merge reports success', clean.merged === true && clean.conflict === false, JSON.stringify(clean))
 check('merge lists the merged files', clean.files.includes('app.js'), JSON.stringify(clean.files))
 check('main tree now has the merged content', readFileSync(join(root, 'app.js'), 'utf8').includes('version = 2'))
 
 // --- merge (conflict) ----------------------------------------------------------
 
-await call('worktree_create', { feature_id: 'rival' })
+await callTool('create', { feature_id: 'rival' })
 writeFileSync(join(root, 'app.js'), 'export const version = 3\n', 'utf8')
 await git(['add', '.'])
 await git(['-c', 'user.name=t', '-c', 'user.email=t@l', 'commit', '-qm', 'main moves on'])
 writeFileSync(join(root, '.worktrees', 'rival', 'app.js'), 'export const version = "rival"\n', 'utf8')
 await git(['-C', join(root, '.worktrees', 'rival'), 'add', '.'])
 await git(['-C', join(root, '.worktrees', 'rival'), '-c', 'user.name=rival', '-c', 'user.email=r@l', 'commit', '-qm', 'rival'])
-const conflicted = await call('worktree_merge', { feature_id: 'rival' })
+const conflicted = await callTool('merge', { feature_id: 'rival' })
 check('merge reports a conflict instead of merging', conflicted.conflict === true && conflicted.merged === false, JSON.stringify(conflicted))
 check('merge names the conflicted file', conflicted.files.includes('app.js'), JSON.stringify(conflicted.files))
 check('the main worktree is untouched after an aborted conflict', readFileSync(join(root, 'app.js'), 'utf8').includes('version = 3'), readFileSync(join(root, 'app.js'), 'utf8'))
@@ -489,7 +529,7 @@ check('no merge is left in progress', !existsSync(join(root, '.git', 'MERGE_HEAD
 
 // --- remove (clean) -------------------------------------------------------------
 
-const removed = await call('worktree_remove', { feature_id: 'rival' })
+const removed = await callTool('remove', { feature_id: 'rival' })
 check('remove deletes a clean worktree', removed.removed === true)
 check('the directory is gone', !existsSync(join(root, '.worktrees', 'rival')))
 const branches = await git(['branch', '--list', 'feature/*'])
@@ -501,16 +541,16 @@ await git(['checkout', '-b', 'feature/solo', '-q'])
 writeFileSync(join(root, 'solo.txt'), 'solo work\n', 'utf8')
 await git(['add', 'solo.txt'])
 await git(['-c', 'user.name=solo', '-c', 'user.email=solo@orch-lite.local', 'commit', '-qm', 'feat: solo work'])
-await rejects('solo merge demands the base branch when `into` is omitted', () => call('worktree_merge', { feature_id: 'solo' }))
-const soloMerge = await call('worktree_merge', { feature_id: 'solo', into: 'main' })
+await rejects('solo merge demands the base branch when `into` is omitted', () => callTool('merge', { feature_id: 'solo' }))
+const soloMerge = await callTool('merge', { feature_id: 'solo', into: 'main' })
 check('solo merge switches to the base and merges', soloMerge.merged === true && soloMerge.into === 'main', JSON.stringify(soloMerge))
 check('the primary tree is back on main', (await git(['rev-parse', '--abbrev-ref', 'HEAD'])).trim() === 'main')
 check('solo changes landed on the base branch', existsSync(join(root, 'solo.txt')))
-const soloRemove = await call('worktree_remove', { feature_id: 'solo' })
+const soloRemove = await callTool('remove', { feature_id: 'solo' })
 check('remove is a no-op for solo work', soloRemove.skipped === true && soloRemove.removed === false, JSON.stringify(soloRemove))
 check(
 	'the no-op render explains the solo lane',
-	registered.get('worktree_remove').output.render({}, soloRemove)[0].text.includes('primary working tree'),
+	registered.get('orch_tool').output.render({}, soloRemove)[0].text.includes('primary working tree'),
 )
 
 // --- a fresh (non-repository) folder: lazy bootstrap -----------------------------
@@ -519,9 +559,9 @@ const bare = mkdtempSync(join(tmpdir(), 'orch-norepo-'))
 const bareExec = { signal: new AbortController().signal, agent: { session: { header: { cwd: bare, id: 'no-repo' } } } }
 writeFileSync(join(bare, 'notes.txt'), 'user content\n', 'utf8')
 // merge must never bootstrap: it fails, and leaves no repository behind
-await rejects('merge refuses a non-repository workspace', () => registered.get('worktree_merge').execute({ feature_id: 'x' }, bareExec))
+await rejects('merge refuses a non-repository workspace', () => registered.get('orch_tool').execute({ action: 'merge', feature_id: 'x' }, bareExec))
 check('the merge attempt created no repository', !existsSync(join(bare, '.git')))
-const bootstrapped = await registered.get('worktree_create').execute({ feature_id: 'scratch' }, bareExec)
+const bootstrapped = await registered.get('orch_tool').execute({ action: 'create', feature_id: 'scratch' }, bareExec)
 check('create bootstraps a repository in a fresh folder', bootstrapped.created === true && bootstrapped.branch === 'feature/scratch', JSON.stringify(bootstrapped))
 check('the repository now exists', existsSync(join(bare, '.git')))
 check('the feature worktree is on disk', existsSync(join(bare, '.worktrees', 'scratch')))

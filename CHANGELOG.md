@@ -4,19 +4,29 @@ All notable changes to this bundle. Rationale for each decision lives in `DEVLOG
 the short form. Dates are omitted on purpose — the project is developed in a single continuous line
 and `DEVLOG.md` carries the ordering.
 
-## Unreleased — repository hygiene (no runtime change)
+## 1.0.3 — the work-area tool goes global (plus repository hygiene)
 
-- The development docs were re-read against the shipped code and three stale claims were corrected:
-  the port appendix no longer calls isolation "always-worktree" (lazy isolation has been the rule
-  since v0.4), the test-harness note reports the current 109/109 checks instead of 62, and the
-  install note describes the tarball install this profile uses as well as a directory install.
-- The repository's version line is now self-describing: `v1.0.2` tags the commit the packed 1.0.2
-  artifact was built from. `v1.0.0` / `v1.0.1` have no reachable commit after the history rebuild and
-  are deliberately untagged.
-- **Known gap, left open on purpose**: the installed `dsh-orch-lite-1.0.2.tgz` predates the LICENSE
-  file and the npm metadata (12 files, `"private": true`), while the repository packs 13 files
-  without that flag. The same version number is not re-cut silently; closing the gap belongs to the
-  next version bump.
+- **One tool instead of three.** `worktree_create` / `worktree_merge` / `worktree_remove` collapse
+  into `orch_tool({ action: "create" | "merge" | "remove", feature_id, base?, into? })`. Same
+  behaviour, same returns (each result now carries `action`), one schema.
+- **Capability is global, enforcement is not.** `orch_tool` and the two manuals are registered by
+  the host row (`lib/host.js`, exported as `dsh-orch-lite/host`) and therefore land in the **global**
+  layers: every preset can load the manuals and call the tool. The protocol section, the boot
+  injection and the gate stay scoped to the `orch-lite` preset, and both manuals say so.
+- **Continuation is conditional.** Resuming an agent is an optimization, not a rule: where
+  `send_message` takes `agent_id` the manual resumes the feature's agent; where the session carries
+  the Team-style tool (`target`) continuation is unavailable and the same-feature work goes to a
+  fresh agent with the surviving conclusions in `STILL VALID`. The branch is the invariant.
+- **`feature_id` is the only identity** (as before), and the protocol section no longer hides
+  itself when the tool is not visible in the caller's scope — that guard could only render `''`
+  silently, and the tool is global now anyway.
+- Repository hygiene, also in this version: three stale claims in the development docs were
+  corrected (the port appendix no longer calls isolation "always-worktree", the harness note reports
+  109/109 instead of 62, the install note describes the tarball install this profile uses); the
+  version line is tagged (`v1.0.2` marks the packed 1.0.2 tree, and `v1.0.0` / `v1.0.1` are
+  deliberately untagged because the history rebuild left them no reachable commit); the packed
+  1.0.2 artifact lacked the LICENSE file and the npm metadata — 1.0.3 is the first tarball packed
+  from the current tree, which closes that gap instead of re-cutting 1.0.2.
 
 ## 1.0.2 — renamed to `dsh-orch-lite`
 

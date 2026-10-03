@@ -1,12 +1,12 @@
 # Agent preset `orch-lite`: the `standard` composition plus the routing
-# discipline, three worktree tools, and the dispatch gate.
+# discipline and the dispatch gate.
 #
 # Two rows ship in this patch:
-#   `preset-orch-lite` — the preset itself (tools, gate, protocol section,
-#   boot injection); it exists only for sessions that select it;
-#   `orch-lite-skills` — a HOST row publishing the two manuals into the GLOBAL
-#   skill layer, so every preset can load them while the tools stay scoped to
-#   this preset.
+#   `preset-orch-lite` — the preset itself (protocol section, boot injection,
+#   gate); it exists only for sessions that select it;
+#   `orch-lite-host` — a HOST row publishing the two manuals AND the `orch_tool`
+#   work-area tool into the GLOBAL layers, so every preset can load the manuals
+#   and use the tool while enforcement stays scoped to this preset.
 #
 # GENERATED from the shipped `standard` preset by `scripts/gen-preset.mjs`.
 # A preset is an authoritative composition, not an incremental layer, so the
@@ -161,11 +161,10 @@
             name: '@deepseek-ai/dsh-tool-present'
 
           # --- dsh-orch-lite ---------------------------------------------
-          # The host plugin registers the protocol section, the two skills,
-          # the boot-context injection, and the enforcement gate — all scoped
-          # to this preset. No Claude-Code hook bridge: a hook process cannot
-          # see agent headers, is evaluated against host env (DSH_HOME is not
-          # set there), and would double the moving parts. See DEVLOG.md.
+          # This preset row registers the protocol section, the boot-context
+          # injection and the enforcement gate, all scoped to this preset.
+          # The two manuals and the `orch_tool` work-area tool are registered
+          # by the host row at the bottom of this patch. See DEVLOG.md.
           - id: orch
             name: 'dsh-orch-lite'
           # orch-lite lane: one-shot read-only sweeps (foreground by default;
@@ -181,7 +180,8 @@
             name: '@deepseek-ai/dsh-plugin-manager/tools'
             disabled: true
 
-    # Host row: the manuals are knowledge for every preset; the tools above are
-    # capability for this one only.
-    - id: orch-lite-skills
-      name: 'dsh-orch-lite/skills'
+    # Host row: the manuals and the `orch_tool` work-area tool are knowledge and
+    # capability for every preset; the protocol and the gate above are enforcement
+    # for this one only.
+    - id: orch-lite-host
+      name: 'dsh-orch-lite/host'
