@@ -85,3 +85,38 @@
 - 打包 1.0.3 → 安装到 profile → 重启宿主，然后按 README 的 9 步清单验收（重点第 9 步：别的预设里 `orch_tool` 是否真的可见）。
 
 ---
+
+### 2026-10-03 - v1.1.0：门禁瘦身（S2 一律 worktree）
+
+**当前分支**：main（改动尚未提交）
+
+**已完成**：
+- 对 v1.0.3 做逐条机制审计，判据固定为"只为不可逆且严重的事故加机制"，据此改代码：
+  - 主会话 `write`/`edit` 与变更型 shell 不再一律拒绝，改为**只在 worker 通道（`.worktrees/<fid>/`）内拒绝**；shell 只保留两类：效应离开仓库（`git push` / publish / `gh pr`）与破坏通道内容
+  - 派发包校验改 **opt-in**：prompt 出现 `feature_id` 或指向 `orch-lite-executor` 才校验，其他 skill 的派发原样放行
+  - 删：执行器禁派发（`EXECUTOR_DENIED_TOOLS`）、`evaluateExplore`、活体注册表（`children`/`runToChild`/父级归组）、`pending` 槽位、`tools/post-execute` 释放器、worktree 形状/存在校验、`audit.log` 落盘
+  - 保留（明确否决了"顺手删 orch_tool"的方案）：`orch_tool` 三动作 + 懒建仓库 bootstrap + `assertSlug`。理由是"少让模型记东西"：工具 schema 被动常驻无需回忆；写进手册的 git 配方要模型主动加载并正确复述（尤其 merge 冲突要先读 `--diff-filter=U` 再 `--abort`，漏了会留 `MERGE_HEAD` 污染后续所有 worker）
+- **S2 决策**：写任务一律开 worktree，取消 solo/concurrent 二选一。本轮最大简化——"这里能不能写"从状态问题变成路径问题，因此活体计数彻底不需要
+- bootstrap 通知从日志改到 `orch_tool` create 结果的 `note` 字段；执行手册里重复的 `git init` 配方删除（两处真相源归一）
+- 平台取证（grep `app.asar`，已记进 DEVLOG）：`subagent.maxDepth` 是 Host 设置（默认 1、用户可改、到上限时工具仍可见并返回出错结果）；`spawn_teammate`/`interrupt_agent` 由执行层限 Lead；`subagent/start|end` 平台强制成对；`ctx.agents.list()/isOwnedBy()/status` 是查活体 agent 的官方 API（本轮没用上，未来需要时的正确入口，不要再自建 Map）
+- 文档同步：README 重写（新增"What the gate deliberately does not do"）、DEVLOG 新开 § v1.1.0（判决台账）、CHANGELOG 1.1.0、两份手册与协议段改写、`gen-preset.mjs` 与 `orch-lite.patch.yml` 同步
+- `package.json` → 1.1.0；删 `git.js` 死代码 `lastCommitFiles`/`displayPath`
+
+**遇到的问题及解决方案**：
+- YAML：preset `description` 含 `": "` 会破坏 plain scalar，改用破折号，并加了守卫测试
+- 沙箱默认无法起 PowerShell（`SetNamedSecurityInfoW failed (Win32 5)`，命令执行前就失败）；经一次 `danger-full-access` 授权后 node 可跑，用户随后把审批策略改为 never。验证结果：**`node --check` 全通过，测试 121/121**（第一版有 1 条 FAIL，是我测试里断言字符串写错，不是代码问题）
+- `lib/audit.js` 已删除（沙箱放开后可直接 `Remove-Item`），pack 从 16 → 15 个文件
+- 手册修剪线：协调手册正文 7087 字符（余量 1105），执行手册 4744（余量 3448），均在 8192 以内并有守卫测试
+
+**注意事项**：
+- 产品保证的降级是**主动接受**的：主会话空闲时可自己动手，上下文卫生（P2）从此只靠协议段与手册，不再由门禁保证
+- 防"两个写者互踩"这个 A 类事故的手段现在是：通道路径拒绝（主会话侧）+ 一分支一 worktree（git 自身拒绝同分支二次 checkout，worker 侧）
+- 发布纪律照旧：1.1.0 需 `npm pack` + `install_bundle` + 重启宿主 + 新会话验收（README 十步，第 3、5、6 步是本次行为回归点）
+
+**下一步计划**：
+- `npm test` 已跑：121/121 通过（`node --check` 亦全通过）
+- 重跑 `node scripts/gen-preset.mjs <web-app 的 presets/cordis.patch.yml> presets/orch-lite.patch.yml` 同步 standard 漂移（1.0.3 遗留：standard 新增 `tool-cordis`、`skill-filesystem.customSkillDirs` 等）
+- 打包 1.1.0 安装验收；`.orch-lite/`（空壳）与 `temp/` bundle 待清理
+- 观察 DEVLOG § v1.1.0 "What to watch" 三条：该后台化的活是否仍被派发、通道规则误伤、纯文本里出现 `feature_id` 会不会误拦
+
+---

@@ -1,12 +1,13 @@
 /**
- * Standalone exercise of the orch-lite host plugin (v0.3): the worktree tools,
- * the feature/explore gate, skill registration, and boot context injection.
+ * Standalone exercise of the orch-lite host plugin (v1.1): the work-area tool,
+ * the slim gate (worker lane + external effects + opt-in package), skill
+ * registration, and the worker hint.
  *
  * The package cannot be installed from this session (the desktop profile is
  * Electron-owned and `plugin_manager` is Creator-mode only), so this harness
- * stubs just enough of `ctx` — subprocess, fs, tools, systemPrompt, skills,
- * the agents registry, and the event bus — to drive the real `lib/index.js`
- * against a real git repository and a fake tool dispatch.
+ * stubs just enough of `ctx` — subprocess, fs, tools, systemPrompt, skills and
+ * the event bus — to drive the real `lib/index.js` against a real git repository
+ * and a fake tool dispatch.
  *
  * Usage: node test/plugin.test.mjs <path-to-dsh-orch-lite>
  */
@@ -23,15 +24,9 @@ if (pkg === undefined) {
 	process.exit(2)
 }
 
-// Keep the plugin's durable audit trail out of the real harness home: the path
-// is resolved at module load from DSH_HOME (else ~/.dsh), as dsh-home-paths does.
-const auditHome = mkdtempSync(join(tmpdir(), 'orch-home-'))
-process.env.DSH_HOME = auditHome
-
 // The bundle has two halves: the preset row (`lib/index.js` — protocol section,
-// boot injection, gate) and the host row (`lib/host.js` — the two manuals AND
-// the `orch_tool` work-area tool, registered globally so every preset can use
-// them).
+// worker hint, gate) and the host row (`lib/host.js` — the two manuals AND the
+// `orch_tool` work-area tool, registered globally so every preset can use them).
 const presetHalf = await import(pathToFileURL(join(pkg, 'lib', 'index.js')).href)
 const hostHalf = await import(pathToFileURL(join(pkg, 'lib', 'host.js')).href)
 
@@ -91,7 +86,6 @@ const sections = []
 const skills = new Map()
 const listeners = new Map()
 const warnings = []
-const logs = []
 const TOOL_VISIBLE_SCOPES = new Set(['orch-preset-mount'])
 const toolsService = {
 	register: tool => {
@@ -100,15 +94,14 @@ const toolsService = {
 	},
 	get: (name, scope) => (TOOL_VISIBLE_SCOPES.has(scope) && registered.has(name) ? registered.get(name) : undefined),
 }
-const agentsService = { map: new Map(), get(id) { return this.map.get(id) } }
 const ctx = {
 	subprocess,
 	fs: fsService,
 	tools: toolsService,
 	systemPrompt: { section: section => sections.push(section) },
 	skills: { register: skill => skills.set(skill.name, skill) },
-	logger: { warn: message => warnings.push(message), info: message => logs.push(message) },
-	get: name => (name === 'agents' ? agentsService : undefined),
+	logger: { warn: message => warnings.push(message) },
+	get: () => undefined,
 	on: (point, listener) => {
 		if (!listeners.has(point)) listeners.set(point, [])
 		listeners.get(point).push(listener)
@@ -123,16 +116,11 @@ hostHalf.apply(ctx)
 const emit = async (point, payload) => {
 	for (const listener of listeners.get(point) ?? []) await listener(payload)
 }
-const emitPost = async (exec, result) => {
-	for (const listener of listeners.get('tools/post-execute') ?? []) {
-		await listener({ ...exec, signal: new AbortController().signal }, result, async () => ({ kind: 'allow' }))
-	}
-}
-const gate = async (exec) => {
+const gate = (exec) => {
 	let nextCalled = false
 	let decision
 	for (const listener of listeners.get('tools/pre-execute') ?? []) {
-		decision = await listener({ ...exec, signal: new AbortController().signal }, async () => {
+		decision = listener({ ...exec, signal: new AbortController().signal }, () => {
 			nextCalled = true
 			return { kind: 'allow' }
 		})
@@ -161,13 +149,11 @@ await git(['init', '-b', 'main', '-q'])
 await git(['add', '.'])
 await git(['-c', 'user.name=t', '-c', 'user.email=t@l', 'commit', '-qm', 'baseline'])
 
-// a live feature worktree so gate existence-checks pass for `login`
-mkdirSync(join(root, '.worktrees', 'login'), { recursive: true })
+// the login feature's live work area
+mkdirSync(join(root, '.worktrees'), { recursive: true })
 await git(['worktree', 'add', join(root, '.worktrees', 'login'), '-b', 'feature/login', '-q'])
 
 const exec = { signal: new AbortController().signal, agent: MAIN }
-const call = (name, args) => registered.get(name).execute(args, exec)
-// One tool, three actions: the work-area operations are all orch_tool.
 const callTool = (action, args) => registered.get('orch_tool').execute({ action, ...args }, exec)
 
 let passed = 0
@@ -199,17 +185,20 @@ check('protocol section at order 2850, interpolate false', protocol?.order === 2
 check('protocol has no silent empty state (no scope guard)', typeof protocol?.text === 'function' && protocol.text({ scope: 'any-scope' }).startsWith('# Mode: orch-lite'))
 {
 	const body = protocol?.text({ scope: 'orch-preset-mount' }) ?? ''
-	check('protocol carries supremacy + routing audit', body.includes('## Supremacy') && body.includes('[routing] chat'))
-	check('protocol carries the ownership model', body.includes('## Ownership model: one feature, one agent, one branch') && body.includes('[routing] resume <feature_id>'))
-	check('protocol states lazy isolation', body.includes('## Isolation is gated on concurrency') && body.includes('Solo** (no other worker running)'))
+	check('protocol states the coordinator may write its own files', body.includes('## Where you may act') && body.includes('Your own project files: write freely'))
+	check('protocol names the two denials', body.includes('.worktrees/<feature_id>/`: denied') && body.includes('outside the repository: denied'))
+	check('protocol carries routing audit + ownership + always-work-area', body.includes('[routing] chat') && body.includes('## Ownership: one feature, one agent, one branch') && body.includes('## Every write task gets its own work area'))
 	check('protocol carries the language rule', body.includes('Answer the user in whatever language the user writes in'))
 	check('protocol demands the skill load', body.includes('Call the skill tool with name `orch-lite`'))
 	check('protocol carries both lanes', body.includes('acceptance_criteria') && body.includes('orch-lite-executor') && body.includes('explore'))
+	// The old blanket claim is the exact thing that locked other skills out.
+	check('protocol no longer claims the main session never writes', !body.includes('never writes files'), body.match(/.{0,60}never writes.{0,20}/)?.[0] ?? '')
 }
 
 // --- skills -----------------------------------------------------------------
 
-check('the two halves inject different services', hostHalf.inject.includes('skills') && hostHalf.inject.includes('tools') && !presetHalf.inject.includes('skills'), JSON.stringify({ preset: presetHalf.inject, host: hostHalf.inject }))
+check('the preset half needs only systemPrompt', presetHalf.inject.join(',') === 'systemPrompt', JSON.stringify(presetHalf.inject))
+check('the host half injects the capability services', hostHalf.inject.includes('skills') && hostHalf.inject.includes('tools') && hostHalf.inject.includes('subprocess'))
 check('the host half names itself for the host row', hostHalf.name === 'orch-lite-host')
 check('both skills registered', skills.has('orch-lite') && skills.has('orch-lite-executor'), [...skills.keys()].join(', '))
 {
@@ -222,24 +211,31 @@ check('both skills registered', skills.has('orch-lite') && skills.has('orch-lite
 		s?.resourceBase?.kind === 'directory' && s.resourceBase.path.endsWith('dsh-orch-lite'),
 		JSON.stringify(s?.resourceBase),
 	)
+	check('skill descriptions survive the 500-char catalog cap', [...skills.values()].every(skill => skill.description.length <= 500), [...skills.values()].map(skill => `${skill.name}:${skill.description.length}`).join(', '))
 }
 
-// --- freshness guards: shipped text must match the shipped tool ------------------
+// --- freshness guards: shipped text must match the shipped behavior ------------------
 
 {
 	const read = relative => readFileSync(join(pkg, ...relative.split('/')), 'utf8')
+	// lib/audit.js was deleted in v1.1.0; the scan list is the shipped surface, so
+	// the retired mechanism may only survive in the history documents.
 	const shipped = [
 		'lib/index.js',
 		'lib/host.js',
 		'lib/tool.js',
 		'lib/workspace.js',
 		'lib/gate.js',
+		'lib/git.js',
 		'skills/orch-lite/SKILL.md',
 		'skills/orch-lite-executor/SKILL.md',
 		'presets/orch-lite.patch.yml',
 	]
-	const stale = shipped.filter(relative => /worktree_(create|merge|remove)/.test(read(relative)))
-	check('no shipped file still names the retired per-action tools', stale.length === 0, stale.join(', '))
+	const retired = ['worktree_create', 'worktree_merge', 'worktree_remove', 'audit.log', 'BOOT_CONTRACT', 'EXECUTOR_DENIED_TOOLS', 'WORKTREE_REQUIRED_WHILE_BUSY', 'evaluateExplore', 'solo lane', 'never writes files']
+	const stale = shipped.flatMap(relative => retired.filter(term => read(relative).includes(term)).map(term => `${relative}: ${term}`))
+	check('no shipped file still names a retired mechanism', stale.length === 0, stale.join(', '))
+	const importers = shipped.filter(relative => /from '\.\/audit\.js'|require\('.\/audit\.js'\)/.test(read(relative)))
+	check('the retired audit module is imported by nothing', importers.length === 0, importers.join(', '))
 	const manual = read('skills/orch-lite/SKILL.md')
 	const handbook = read('skills/orch-lite-executor/SKILL.md')
 	check('the coordinator manual stays under the pruner threshold', manual.length < 8192, String(manual.length))
@@ -253,11 +249,16 @@ check('both skills registered', skills.has('orch-lite') && skills.has('orch-lite
 		'the manual makes continuation conditional on agent addressability',
 		manual.includes('takes `target`') && manual.includes('continuation is unavailable'),
 	)
+	check(
+		'the handbook gives no bootstrap recipe (one repository truth: the tool)',
+		!handbook.includes('git init'),
+	)
 	const toolSource = read('lib/tool.js')
 	check(
 		'the tool description says it works outside the preset without enforcement',
 		toolSource.includes('nothing enforces the discipline'),
 	)
+	check('the tool description requires a work area for every write task', toolSource.includes('before dispatching any write task'))
 }
 
 // --- packaging: the global skills+tool split must survive regenerate/repack -----
@@ -270,6 +271,7 @@ check('both skills registered', skills.has('orch-lite') && skills.has('orch-lite
 	)
 	check('the patch uses no tabs', !yml.includes('\t'))
 	check('the patch ends with a newline', yml.endsWith('\n'))
+	check('the preset description is a safe YAML plain scalar', /^ {8}description: [^'"].*: /m.test(yml) === false, yml.match(/^ {8}description: .*$/m)?.[0]?.slice(0, 90) ?? '')
 	// indentation is the structure: 4 = insert-list entries, 10 = preset plugin rows
 	check('the preset row sits at the insert-list level', /^ {4}- id: preset-orch-lite$/m.test(yml))
 	check(
@@ -294,175 +296,130 @@ check('both skills registered', skills.has('orch-lite') && skills.has('orch-lite
 }
 check('no registration warnings', warnings.length === 0, warnings.join(' | '))
 
-// --- boot context -------------------------------------------------------------
+// --- worker hint --------------------------------------------------------------
 
 {
 	const injected = []
-	const fakeAgent = { session: { header: { id: 'fresh-main', cwd: root, agentPreset: 'orch-lite', delegationDepth: 0 } }, inject: m => injected.push(m) }
-	await emit('agent/created', { agent: fakeAgent, source: 'startup' })
-	check('main session gets the boot contract', injected.length === 1 && injected[0].content[0].text.includes('Session mode: ORCHESTRATION'))
-	check('boot contract carries the ownership rule', injected[0].content[0].text.includes('one feature_id = one agent = one branch'))
-	check('boot contract carries lazy isolation', injected[0].content[0].text.includes('Isolation is lazy'))
+	const fakeMain = { session: { header: { id: 'fresh-main', cwd: root, agentPreset: 'orch-lite', delegationDepth: 0 } }, inject: m => injected.push(m) }
+	await emit('agent/created', { agent: fakeMain, source: 'startup' })
+	check('the main session gets no boot contract (the protocol section is always visible)', injected.length === 0, JSON.stringify(injected))
 	const injectedChild = []
 	const fakeChild = { session: { header: { id: 'fresh-child', cwd: root, agentPreset: 'orch-lite', delegationDepth: 1, parentSession: 'fresh-main' } }, inject: m => injectedChild.push(m) }
 	await emit('agent/created', { agent: fakeChild, source: 'subagent' })
-	check('worker gets the mode-neutral hint', injectedChild[0]?.content?.[0]?.text?.includes('dispatched worker'))
-	check('hint covers both lanes', injectedChild[0].content[0].text.includes('orch-lite-executor') && injectedChild[0].content[0].text.includes('read-only'))
+	check('worker gets the reporting hint', injectedChild[0]?.content?.[0]?.text?.includes('dispatched worker'))
+	check('the hint fixes the reporting channel', injectedChild[0].content[0].text.includes('ENDING YOUR TURN'))
+	check('the hint does not restate a dispatch ban (the platform caps depth)', !injectedChild[0].content[0].text.includes('Never dispatch'))
 	await emit('agent/created', { agent: { session: { header: { id: 'x', cwd: root, agentPreset: 'standard' } }, inject: () => check('standard session must not be touched', false) }, source: 'startup' })
 	check('non-orch-lite sessions are ignored', true)
 }
 
-// --- gate: main session write/shell -------------------------------------------
+// --- gate: main-session writes --------------------------------------------------
 
 {
-	const write = await gate({ agent: MAIN, name: 'write', arguments: { path: 'a.txt', content: 'x' } })
-	check('gate denies main write', write.decision?.kind === 'deny' && write.decision?.reason?.includes('never writes'))
-	check('denials are audited to the host log', logs.some((line) => line.includes('orch-lite gate: deny (main write)')), logs.join(' | '))
-	const edit = await gate({ agent: MAIN, name: 'edit', arguments: {} })
-	check('gate denies main edit', edit.decision?.kind === 'deny')
-	const rm = await gate({ agent: MAIN, name: 'pwsh', arguments: { command: 'Remove-Item app.js' } })
-	check('gate denies mutating shell', rm.decision?.kind === 'deny' && rm.decision?.reason?.includes('dispatch-only'))
-	const gc = await gate({ agent: MAIN, name: 'pwsh', arguments: { command: 'git -c user.name=x commit -qm m' } })
-	check('gate denies git commit', gc.decision?.kind === 'deny')
-	const read = await gate({ agent: MAIN, name: 'pwsh', arguments: { command: 'Get-ChildItem | Select-Object Name' } })
-	check('gate passes read-only shell', read.nextCalled)
-	const stat = await gate({ agent: MAIN, name: 'bash', arguments: { command: 'git status && git log -n 3 && git branch' } })
-	check('gate passes git status/log/branch-list', stat.nextCalled)
-	const diff = await gate({ agent: MAIN, name: 'bash', arguments: { command: 'git diff -- app.js > /dev/null 2>&1' } })
-	check('gate passes git diff with /dev/null redirect', diff.nextCalled)
-	const out = await gate({ agent: MAIN, name: 'pwsh', arguments: { command: 'rg -n "version" app.js > hits.txt' } })
-	check('gate denies output redirection to a file', out.decision?.kind === 'deny')
-	const install = await gate({ agent: MAIN, name: 'bash', arguments: { command: 'npm install left-pad' } })
-	check('gate denies package installs', install.decision?.kind === 'deny')
-	const mergeTool = await gate({ agent: MAIN, name: 'orch_tool', arguments: { action: 'merge', feature_id: 'login' } })
+	const own = gate({ agent: MAIN, name: 'write', arguments: { file_path: join(root, 'src', 'app.ts'), content: 'x' } })
+	check('the coordinator may write its own project files', own.nextCalled, own.decision?.reason)
+	const ownRelative = gate({ agent: MAIN, name: 'edit', arguments: { file_path: 'README.md' } })
+	check('a relative project path passes too', ownRelative.nextCalled)
+	const lane = gate({ agent: MAIN, name: 'write', arguments: { file_path: join(root, '.worktrees', 'login', 'app.js'), content: 'x' } })
+	check('gate denies writing into a worker lane', lane.decision?.kind === 'deny' && lane.decision.reason.includes('worker lane'), lane.decision?.reason)
+	const laneRelative = gate({ agent: MAIN, name: 'edit', arguments: { file_path: '.worktrees/login/app.js' } })
+	check('the lane test covers relative paths as well', laneRelative.decision?.kind === 'deny')
+	const laneDir = gate({ agent: MAIN, name: 'write', arguments: { file_path: '.worktrees' } })
+	check('the lane directory itself is denied', laneDir.decision?.kind === 'deny')
+	const lookalike = gate({ agent: MAIN, name: 'write', arguments: { file_path: 'worktrees/login/app.js' } })
+	check('a directory merely named like the lane passes', lookalike.nextCalled, lookalike.decision?.reason)
+	const otherPathKey = gate({ agent: MAIN, name: 'write', arguments: { path: '.worktrees/login/app.js' } })
+	check('the other file-path argument name is honoured', otherPathKey.decision?.kind === 'deny')
+	const noPath = gate({ agent: MAIN, name: 'write', arguments: {} })
+	check('a write the gate cannot read passes (fail open)', noPath.nextCalled)
+}
+
+// --- gate: shell ----------------------------------------------------------------
+
+{
+	const push = gate({ agent: MAIN, name: 'pwsh', arguments: { command: 'git -c user.name=x push origin main' } })
+	check('gate denies git push', push.decision?.kind === 'deny' && push.decision.reason.includes('outside the repository'), push.decision?.reason)
+	const publish = gate({ agent: MAIN, name: 'bash', arguments: { command: 'npm publish --access public' } })
+	check('gate denies package publishing', publish.decision?.kind === 'deny')
+	const gh = gate({ agent: MAIN, name: 'pwsh', arguments: { command: 'gh pr create --title x' } })
+	check('gate denies a github write (gh pr)', gh.decision?.kind === 'deny')
+	const ghRead = gate({ agent: MAIN, name: 'pwsh', arguments: { command: 'gh run view 12345' } })
+	check('a gh read passes', ghRead.nextCalled, ghRead.decision?.reason)
+	const laneWipe = gate({ agent: MAIN, name: 'bash', arguments: { command: 'rm -rf .worktrees/login' } })
+	check('gate denies destroying a work area from the shell', laneWipe.decision?.kind === 'deny', laneWipe.decision?.reason)
+	const laneRead = gate({ agent: MAIN, name: 'pwsh', arguments: { command: 'Get-ChildItem .worktrees | Select-Object Name' } })
+	check('reading the lane directory passes', laneRead.nextCalled, laneRead.decision?.reason)
+	// The commands that used to be blocked and are the coordinator's ordinary work:
+	for (const [label, command] of [
+		['git commit', 'git add . && git commit -qm "fix: thing"'],
+		['git checkout', 'git checkout -b feature/scratch'],
+		['git merge', 'git merge --no-edit feature/login'],
+		['install', 'pnpm install --frozen-lockfile'],
+		['redirect into a project file', 'rg -n "version" app.js > hits.txt'],
+		['project delete', 'Remove-Item src/old.ts'],
+	]) {
+		const r = gate({ agent: MAIN, name: 'pwsh', arguments: { command } })
+		check(`in-repo work passes (${label})`, r.nextCalled, r.decision?.reason)
+	}
+	const read = gate({ agent: MAIN, name: 'bash', arguments: { command: 'git status && git log -n 3 && git branch' } })
+	check('gate passes git status/log/branch-list', read.nextCalled)
+	const mergeTool = gate({ agent: MAIN, name: 'orch_tool', arguments: { action: 'merge', feature_id: 'login' } })
 	check('gate passes the integration tool', mergeTool.nextCalled)
 }
 
-// --- gate: feature dispatch ----------------------------------------------------
+// --- gate: dispatch is opt-in ----------------------------------------------------
 
 {
-	const featurePrompt = (pkg) =>
+	const featurePrompt = (body) =>
 		'You are the login feature agent.\nFirst call the skill tool with name orch-lite-executor and follow it.\n' +
-		'```json\n' + JSON.stringify(pkg) + '\n```'
+		'```json\n' + JSON.stringify(body) + '\n```'
 	const good = featurePrompt({ feature_id: 'login', objective: 'o', acceptance_criteria: ['c'], worktree: '.worktrees/login' })
-	const r1 = await gate({ agent: MAIN, name: 'subagent', arguments: { description: 'login', prompt: good } })
-	check('gate passes a compliant feature package', r1.nextCalled, r1.decision?.reason)
-	const r2 = await gate({ agent: MAIN, name: 'subagent', arguments: { description: 'Login feature', prompt: good } })
-	check('gate rejects description != feature_id', r2.decision?.kind === 'deny' && r2.decision.reason.includes('feature_id'))
-	const r3 = await gate({ agent: MAIN, name: 'subagent', arguments: { description: 'x', prompt: 'prose, no fence' } })
-	check('gate rejects a missing package', r3.decision?.kind === 'deny' && r3.decision.reason.includes('fenced'))
-	const r4 = await gate({ agent: MAIN, name: 'subagent', arguments: { description: 'login', prompt: good.replace('orch-lite-executor', 'other') } })
-	check('gate rejects a missing handbook pointer', r4.decision?.kind === 'deny' && r4.decision.reason.includes('handbook'))
+	check('gate passes a compliant feature package', gate({ agent: MAIN, name: 'subagent', arguments: { description: 'login', prompt: good } }).nextCalled)
+	check(
+		'gate rejects description != feature_id',
+		gate({ agent: MAIN, name: 'subagent', arguments: { description: 'Login feature', prompt: good } }).decision?.kind === 'deny',
+	)
+	check(
+		'gate rejects a missing handbook pointer',
+		gate({ agent: MAIN, name: 'subagent', arguments: { description: 'login', prompt: featurePrompt({ feature_id: 'login', objective: 'o', acceptance_criteria: ['c'], worktree: '.worktrees/login' }).replace('orch-lite-executor', 'other') } }).decision?.reason.includes('handbook'),
+	)
 	const noWorktree = featurePrompt({ feature_id: 'login', objective: 'o', acceptance_criteria: ['c'] })
-	const r5 = await gate({ agent: MAIN, name: 'subagent', arguments: { description: 'login', prompt: noWorktree } })
-	check('solo dispatch needs no worktree when nothing else runs', r5.nextCalled, r5.decision?.reason)
-	// the allowed solo dispatch reserved a pending slot; a second solo in the
-	// same burst (before the first child registers) must be refused
-	const beta = featurePrompt({ feature_id: 'beta', objective: 'o', acceptance_criteria: ['c'] })
-	const r5b = await gate({ agent: MAIN, name: 'subagent', arguments: { description: 'beta', prompt: beta } })
-	check('a second solo dispatch is refused while the first is still starting', r5b.decision?.kind === 'deny' && r5b.decision.reason.includes('already running'), r5b.decision?.reason)
-	// a dispatch that failed to start a child releases its slot at post-execute
-	await emitPost({ agent: MAIN, name: 'subagent', arguments: { description: 'login', prompt: noWorktree } }, { content: [{ type: 'text', text: 'Error: provider rejected the spawn' }] })
-	const r5c = await gate({ agent: MAIN, name: 'subagent', arguments: { description: 'beta', prompt: beta } })
-	check('the solo lane reopens after the failed dispatch released its slot', r5c.nextCalled, r5c.decision?.reason)
-	// beta now holds a slot; a SUCCESS ack must not release it (start will)
-	await emitPost({ agent: MAIN, name: 'subagent', arguments: { description: 'beta', prompt: beta } }, { content: [{ type: 'text', text: 'started subagent child-beta-1' }] })
-	const BETA = { session: { header: { id: 'child-beta', cwd: root, agentPreset: 'orch-lite', delegationDepth: 1, parentSession: 'main-1' } } }
-	agentsService.map.set('run-beta', BETA)
-	await emit('subagent/start', { id: 'run-beta', runId: 'run-beta' })
-	await emit('subagent/end', { id: 'run-beta', runId: 'run-beta' })
-	agentsService.map.delete('run-beta')
-	const ghost = featurePrompt({ feature_id: 'ghost', objective: 'o', acceptance_criteria: ['c'], worktree: '.worktrees/ghost' })
-	const r6 = await gate({ agent: MAIN, name: 'subagent', arguments: { description: 'ghost', prompt: ghost } })
-	check('gate rejects a worktree that does not exist', r6.decision?.kind === 'deny' && r6.decision.reason.includes('does not exist'), r6.decision?.reason)
-	const badShape = featurePrompt({ feature_id: 'login', objective: 'o', acceptance_criteria: ['c'], worktree: '.worktrees/other' })
-	const r7 = await gate({ agent: MAIN, name: 'subagent', arguments: { description: 'login', prompt: badShape } })
-	check('gate rejects a worktree that is not this feature\'s', r7.decision?.kind === 'deny' && r7.decision.reason.includes('.worktrees/login'))
+	const missingArea = gate({ agent: MAIN, name: 'subagent', arguments: { description: 'login', prompt: noWorktree } })
+	check('a feature package without a work area is refused (S2)', missingArea.decision?.kind === 'deny' && missingArea.decision.reason.includes('worktree'), missingArea.decision?.reason)
+	const missingField = gate({ agent: MAIN, name: 'subagent', arguments: { description: 'login', prompt: featurePrompt({ feature_id: 'login', objective: 'o' }) } })
+	check('a feature package missing acceptance_criteria is refused', missingField.decision?.kind === 'deny')
+	const badId = gate({ agent: MAIN, name: 'subagent', arguments: { description: 'Login', prompt: featurePrompt({ feature_id: 'Login', objective: 'o', acceptance_criteria: ['c'], worktree: '.worktrees/login' }) } })
+	check('a non-kebab feature_id is refused', badId.decision?.kind === 'deny')
+	const prose = gate({ agent: MAIN, name: 'subagent', arguments: { description: 'summarize notes', prompt: 'Read memory/session.md and append today’s decisions. No structured package here.' } })
+	check('a dispatch that is not a feature package passes (opt-in contract)', prose.nextCalled, prose.decision?.reason)
+	const otherSkill = gate({ agent: MAIN, name: 'subagent_fork', arguments: { description: 'remember', prompt: 'Load the memory skill and store this preference in the memory file.' } })
+	check("another skill's own dispatch convention passes", otherSkill.nextCalled, otherSkill.decision?.reason)
+	const claimsButNoFence = gate({ agent: MAIN, name: 'subagent', arguments: { description: 'login', prompt: 'feature_id: login — but no fenced package at all' } })
+	check('claiming a feature_id without a package is told why', claimsButNoFence.decision?.kind === 'deny' && claimsButNoFence.decision.reason.includes('feature_id'), claimsButNoFence.decision?.reason)
+	// M9 removed: explore carries no contract the gate could police.
+	const looseExplore = gate({ agent: MAIN, name: 'explore', arguments: { description: 'trace-auth', prompt: 'Find every token validation site and report with file:line.' } })
+	check('explore is no longer package-gated', looseExplore.nextCalled, looseExplore.decision?.reason)
 }
 
-// --- gate: parent-grouped concurrency (cross-session immunity) --------------------
+// --- gate: children are not routed ------------------------------------------------
 
 {
-	const otherChild = { session: { header: { id: 'child-of-other', cwd: root, agentPreset: 'orch-lite', delegationDepth: 1, parentSession: 'other-main' } } }
-	agentsService.map.set('run-o1', otherChild)
-	await emit('subagent/start', { id: 'run-o1', runId: 'run-o1' })
-	const probe =
-		'You are the delta feature agent.\nFirst call the skill tool with name orch-lite-executor and follow it.\n```json\n' +
-		JSON.stringify({ feature_id: 'delta', objective: 'o', acceptance_criteria: ['c'] }) + '\n```'
-	const r = await gate({ agent: MAIN, name: 'subagent', arguments: { description: 'delta', prompt: probe } })
-	check("another session's live worker does not close my solo lane", r.nextCalled, r.decision?.reason)
-	await emitPost({ agent: MAIN, name: 'subagent', arguments: { description: 'delta', prompt: probe } }, { content: [{ type: 'text', text: 'Error: provider rejected the spawn' }] })
-	await emit('subagent/end', { id: 'run-o1', runId: 'run-o1' })
-	agentsService.map.delete('run-o1')
+	const w = gate({ agent: CHILD, name: 'write', arguments: { file_path: '.worktrees/login/app.js', content: 'y' } })
+	check('a worker writes inside its own area', w.nextCalled)
+	const d = gate({ agent: CHILD, name: 'subagent', arguments: { description: 'x', prompt: 'whatever' } })
+	check('a worker dispatch is left to the platform depth setting', d.nextCalled, d.decision?.reason)
+	const t = gate({ agent: CHILD, name: 'spawn_teammate', arguments: {} })
+	check('the plugin does not re-implement the Lead-only rule', t.nextCalled)
+	const p = gate({ agent: CHILD, name: 'workflow', arguments: {} })
+	check('the plugin does not gate workflow either', p.nextCalled)
 }
 
-// --- gate: explore dispatch ------------------------------------------------------
+// --- gate: unknown agents pass ------------------------------------------------------
 
 {
-	const ok =
-		'Wide sweep of the auth flow.\n```json\n{ "objective": "find every token validation site" }\n```\n' +
-		'This is a read-only investigation; do not change any file. Report with file:line references.'
-	const e1 = await gate({ agent: MAIN, name: 'explore', arguments: { description: 'trace-auth', prompt: ok } })
-	check('gate passes a compliant explore call', e1.nextCalled, e1.decision?.reason)
-	const e2 = await gate({ agent: MAIN, name: 'explore', arguments: { description: 'trace-auth', prompt: ok.replace(/read-only[^.]*\./, 'check it out.') } })
-	check('gate rejects an explore without the read-only statement', e2.decision?.kind === 'deny' && e2.decision.reason.includes('read-only'))
-	const e3 = await gate({ agent: MAIN, name: 'explore', arguments: { description: 'trace-auth', prompt: ok.replace('```json\n{ "objective": "find every token validation site" }', '```json\n{ "objective": "x", "worktree": ".worktrees/login" }') } })
-	check('gate rejects a explore carrying a worktree', e3.decision?.kind === 'deny' && e3.decision.reason.includes('read-only lane') === false && e3.decision.reason.includes('must not carry'))
-	const e4 = await gate({ agent: MAIN, name: 'explore', arguments: { description: 'x', prompt: 'no structure at all' } })
-	check('gate rejects an explore with no package', e4.decision?.kind === 'deny')
-}
-
-// --- gate: executors -------------------------------------------------------------
-
-{
-	agentsService.map.set('run-1', CHILD)
-	await emit('subagent/start', { id: 'run-1', runId: 'run-1' })
-	const w = await gate({ agent: CHILD, name: 'write', arguments: { path: 'x', content: 'y' } })
-	check('executors may write', w.nextCalled)
-	const d = await gate({ agent: CHILD, name: 'subagent', arguments: { description: 'x', prompt: 'whatever' } })
-	check('executors may not dispatch further', d.decision?.kind === 'deny' && d.decision.reason.includes('depth budget'))
-	const e = await gate({ agent: CHILD, name: 'explore', arguments: { description: 'x', prompt: 'whatever' } })
-	check('executors may not spawn explores', e.decision?.kind === 'deny')
-	const t = await gate({ agent: CHILD, name: 'spawn_teammate', arguments: {} })
-	check('executors may not create teams', t.decision?.kind === 'deny')
-	// lazy isolation, concurrent half: while this worker is live, a worktree-less
-	// dispatch must be refused
-	const concurrent = await gate({
-		agent: MAIN,
-		name: 'subagent',
-		arguments: {
-			description: 'payment',
-			prompt:
-				'You are the payment feature agent.\nFirst call the skill tool with name orch-lite-executor and follow it.\n```json\n' +
-				JSON.stringify({ feature_id: 'payment', objective: 'o', acceptance_criteria: ['c'] }) +
-				'\n```',
-		},
-	})
-	check('a worktree-less dispatch is refused while another worker runs', concurrent.decision?.kind === 'deny' && concurrent.decision.reason.includes('already running'), concurrent.decision?.reason)
-	await emit('subagent/end', { id: 'run-1', runId: 'run-1' })
-	const soloAgain = await gate({
-		agent: MAIN,
-		name: 'subagent',
-		arguments: {
-			description: 'payment',
-			prompt:
-				'You are the payment feature agent.\nFirst call the skill tool with name orch-lite-executor and follow it.\n```json\n' +
-				JSON.stringify({ feature_id: 'payment', objective: 'o', acceptance_criteria: ['c'] }) +
-				'\n```',
-		},
-	})
-	check('the solo lane reopens once the worker settles', soloAgain.nextCalled, soloAgain.decision?.reason)
-}
-
-// --- gate: unknown agents pass ----------------------------------------------------
-
-{
-	const r = await gate({ name: 'write', arguments: {} })
-	check('host-local calls (no agent) pass', r.nextCalled)
-	check('unattributable gated calls are logged as fail-open', logs.some((line) => line.includes('fail-open')))
+	check('host-local calls (no agent) pass', gate({ name: 'write', arguments: {} }).nextCalled)
 	const foreign = { session: { header: { id: 'f', cwd: root, agentPreset: 'standard' } } }
-	const r2 = await gate({ agent: foreign, name: 'write', arguments: {} })
-	check('foreign-preset sessions pass untouched', r2.nextCalled)
+	check('foreign-preset sessions pass untouched', gate({ agent: foreign, name: 'write', arguments: { file_path: '.worktrees/login/x' } }).nextCalled)
 }
 
 // --- slug validation ----------------------------------------------------------
@@ -472,18 +429,19 @@ await rejects('rejects an uppercase feature_id', () => callTool('create', { feat
 await rejects('rejects a feature_id with a separator', () => callTool('create', { feature_id: 'a/b' }))
 await rejects('rejects an unknown action', () => callTool('frobnicate', { feature_id: 'login' }))
 
-// --- create (reuses the fixture worktree) / idempotence ------------------------
+// --- create (reuses the live area) / idempotence -------------------------------
 
 const created = await callTool('create', { feature_id: 'login' })
-check('create is idempotent on the live feature worktree', created.created === false && created.reused === true)
-check('worktree path follows the feature', created.worktree_path.endsWith('/.worktrees/login'), created.worktree_path)
+check('create is idempotent on the live work area', created.created === false && created.reused === true)
+check('work area path follows the feature', created.worktree_path.endsWith('/.worktrees/login'), created.worktree_path)
 check('branch follows the feature', created.branch === 'feature/login', created.branch)
+check('a reused area carries no bootstrap notice', created.note === '', JSON.stringify(created.note))
 
 // --- a new feature gets a fresh area -------------------------------------------
 
 const fresh = await callTool('create', { feature_id: 'docs' })
 check('a new feature creates its area', fresh.created === true && fresh.branch === 'feature/docs')
-check('fresh worktree directory exists', existsSync(join(root, '.worktrees', 'docs', 'app.js')))
+check('fresh work area directory exists', existsSync(join(root, '.worktrees', 'docs', 'app.js')))
 check('.gitignore gained .worktrees/', readFileSync(join(root, '.gitignore'), 'utf8').includes('.worktrees/'))
 
 // --- holder fallback when the branch lives elsewhere ----------------------------
@@ -504,7 +462,7 @@ await git(['-C', join(root, '.worktrees', 'login'), '-c', 'user.name=login', '-c
 
 writeFileSync(join(root, '.worktrees', 'login', 'dirty.txt'), 'x', 'utf8')
 const refused = await callTool('remove', { feature_id: 'login' })
-check('remove refuses a dirty worktree', refused.removed === false && refused.dirty.includes('dirty.txt'), JSON.stringify(refused.dirty))
+check('remove refuses a dirty work area', refused.removed === false && refused.dirty.includes('dirty.txt'), JSON.stringify(refused.dirty))
 rmSync(join(root, '.worktrees', 'login', 'dirty.txt'))
 
 const clean = await callTool('merge', { feature_id: 'login' })
@@ -530,30 +488,28 @@ check('no merge is left in progress', !existsSync(join(root, '.git', 'MERGE_HEAD
 // --- remove (clean) -------------------------------------------------------------
 
 const removed = await callTool('remove', { feature_id: 'rival' })
-check('remove deletes a clean worktree', removed.removed === true)
+check('remove deletes a clean work area', removed.removed === true)
 check('the directory is gone', !existsSync(join(root, '.worktrees', 'rival')))
 const branches = await git(['branch', '--list', 'feature/*'])
 check('remove keeps the branch', branches.includes('feature/rival'), branches.trim())
 
-// --- solo lane: branch in the primary tree, merge with `into`, nothing to remove
+// --- never created: soft no-op ---------------------------------------------------
 
-await git(['checkout', '-b', 'feature/solo', '-q'])
-writeFileSync(join(root, 'solo.txt'), 'solo work\n', 'utf8')
-await git(['add', 'solo.txt'])
-await git(['-c', 'user.name=solo', '-c', 'user.email=solo@orch-lite.local', 'commit', '-qm', 'feat: solo work'])
-await rejects('solo merge demands the base branch when `into` is omitted', () => callTool('merge', { feature_id: 'solo' }))
-const soloMerge = await callTool('merge', { feature_id: 'solo', into: 'main' })
-check('solo merge switches to the base and merges', soloMerge.merged === true && soloMerge.into === 'main', JSON.stringify(soloMerge))
-check('the primary tree is back on main', (await git(['rev-parse', '--abbrev-ref', 'HEAD'])).trim() === 'main')
-check('solo changes landed on the base branch', existsSync(join(root, 'solo.txt')))
-const soloRemove = await callTool('remove', { feature_id: 'solo' })
-check('remove is a no-op for solo work', soloRemove.skipped === true && soloRemove.removed === false, JSON.stringify(soloRemove))
+const soloRemove = await callTool('remove', { feature_id: 'never-existed' })
+check('remove is a no-op when no area exists', soloRemove.skipped === true && soloRemove.removed === false, JSON.stringify(soloRemove))
 check(
-	'the no-op render explains the solo lane',
-	registered.get('orch_tool').output.render({}, soloRemove)[0].text.includes('primary working tree'),
+	'the no-op render says so',
+	registered.get('orch_tool').output.render({}, soloRemove)[0].text.includes('nothing to remove'),
 )
 
-// --- a fresh (non-repository) folder: lazy bootstrap -----------------------------
+// --- merge demands a target when the primary tree sits on the branch ------------
+
+await git(['checkout', '-b', 'feature/held', '-q'])
+await rejects('merge names the branch problem when `into` is omitted', () => callTool('merge', { feature_id: 'held' }))
+await git(['checkout', 'main', '-q'])
+await git(['branch', '-D', 'feature/held'])
+
+// --- a fresh (non-repository) folder: lazy bootstrap -------------------------------
 
 const bare = mkdtempSync(join(tmpdir(), 'orch-norepo-'))
 const bareExec = { signal: new AbortController().signal, agent: { session: { header: { cwd: bare, id: 'no-repo' } } } }
@@ -564,27 +520,18 @@ check('the merge attempt created no repository', !existsSync(join(bare, '.git'))
 const bootstrapped = await registered.get('orch_tool').execute({ action: 'create', feature_id: 'scratch' }, bareExec)
 check('create bootstraps a repository in a fresh folder', bootstrapped.created === true && bootstrapped.branch === 'feature/scratch', JSON.stringify(bootstrapped))
 check('the repository now exists', existsSync(join(bare, '.git')))
-check('the feature worktree is on disk', existsSync(join(bare, '.worktrees', 'scratch')))
+check('the feature work area is on disk', existsSync(join(bare, '.worktrees', 'scratch')))
+check('the bootstrap notice reaches the model through the tool result', typeof bootstrapped.note === 'string' && bootstrapped.note.includes('Bootstrapped a git repository'), String(bootstrapped.note))
+check('the notice renders ahead of the dispatch hint', registered.get('orch_tool').output.render({}, bootstrapped)[0].text.includes('Bootstrapped a git repository'))
 const bareLog = (await git(['log', '--format=%s'], bare)).trim()
 check('a baseline commit exists', bareLog.includes('chore: orch-lite baseline'), bareLog)
 const tracked = (await git(['ls-files'], bare)).trim()
 check('user files stay untracked (only .gitignore was claimed)', !tracked.includes('notes.txt'), tracked)
 check('the user file is untouched', readFileSync(join(bare, 'notes.txt'), 'utf8').includes('user content'))
-check('the bootstrap is logged', logs.some((line) => line.includes('bootstrapped a git repository')))
 check('ignored entries were written', readFileSync(join(bare, '.gitignore'), 'utf8').includes('.worktrees/'))
-
-// --- the durable audit trail ------------------------------------------------------
-
-const auditFile = join(auditHome, 'orch-lite', 'audit.log')
-check('a durable audit trail exists', existsSync(auditFile), auditFile)
-const auditText = existsSync(auditFile) ? readFileSync(auditFile, 'utf8') : ''
-check('denials reach the trail', auditText.includes('deny (main write)'))
-check('the solo-lane decision reaches the trail', auditText.includes('allow (solo lane'))
-check('the bootstrap reaches the trail', auditText.includes('bootstrapped a git repository'))
 
 rmSync(root, { recursive: true, force: true })
 rmSync(bare, { recursive: true, force: true })
-rmSync(auditHome, { recursive: true, force: true })
 
 console.log(`\n${passed}/${passed + failed} passed`)
 if (warnings.length > 0) console.log(`warnings: ${warnings.join(' | ')}`)

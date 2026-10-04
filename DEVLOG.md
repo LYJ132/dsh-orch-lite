@@ -4,6 +4,119 @@ Decision history and rationale for this plugin. Plugin code, skills, prompts,
 and tool messages carry only current rules and runtime facts; the "why we did
 it this way" lives here.
 
+## v1.1.0 — the slimming: from "the coordinator cannot act" to "nobody touches a worker's lane"
+
+Owner-led audit of v1.0.3: the bundle had grown enforcement that locked *other people's* skills out
+of their own conventions, and several mechanisms defended accidents that a git command or one
+sentence reverses. The rule adopted for every line of code: **a new mechanism must defend something
+irreversible and severe**; recoverable, low-probability, or platform-already-handled cases stay
+prompt discipline. Nothing was added for a problem that has not happened.
+
+### What the cut ledger says
+
+| Mechanism (v1.0.3) | The accident it actually prevented | Irreversible? | Decision |
+|---|---|---|---|
+| main `write`/`edit` denied outright | coordinator editing files itself | no — correctable, and a simple write never deserved an agent | mirrored: denied **only inside a worker lane** |
+| mutating shell denied outright (`commandMutates`) | same, plus installs / branch switches | no | only lane-destroying shell stays denied |
+| dispatch package format forced on **every** `subagent` call | malformed feature package | no — re-send | **opt-in**: validated only when the prompt declares `feature_id` or names the executor handbook |
+| executors denied `subagent`/`explore`/`spawn_teammate`/`workflow` | recursive fan-out | no, and **already platform-handled** | deleted |
+| `explore` package validation | a "read-only" sweep that writes | no — and it policed the *parent's wording*, never the child's behaviour | deleted |
+| concurrency half: `WORKTREE_REQUIRED_WHILE_BUSY`, `pending` slots, `post-execute` ack parsing, worktree shape/existence checks | two solo dispatches booking one primary tree | **yes** (that was the one real one) — but probability low, and… | deleted, because the whole race disappears with the lane rule below |
+| live-worker registry (`children`, `runToChild`, parent grouping) | counting who is running | — | deleted; not replaced by anything |
+| durable `audit.log` | "why did the gate say no" | — | deleted; the notice worth keeping moved into the tool result |
+
+### The change that let the rest fall away (S2: every write task owns an area)
+
+Lazy isolation (v0.4) had made the work area conditional — solo in the primary tree, worktree when
+someone else was live. That condition is where the complexity lived: a roster check before every
+dispatch, a pending-slot race to close the dispatch→registration window, an `into` parameter to undo
+"the primary tree is parked on the feature branch", a dirty-tree guard so a solo agent would not drag
+someone else's edits onto its branch, a `skipped` no-op on `remove`, and a `worktree` field whose
+absence meant something.
+
+Now the area is unconditional, so **"may this session write here?" became a path question instead of a
+state question**: workers live under `.worktrees/<fid>/`, therefore the primary tree is free, therefore
+no live-worker count is needed anywhere. The gate is three branches and zero state.
+
+The concurrency race the pending slots existed for does not vanish by argument — it vanishes by
+removing the thing it raced over: two writers can now only meet inside a lane, and a lane is
+single-owner by construction (`git` itself refuses a second checkout of one branch).
+
+Cost, accepted: one worktree per write task (a few hundred ms and some disk) where the old lazy rule
+saved it; the coordinator occasionally allocates an area for work it might have done inline. Measured
+against what it deleted — two event listeners, three maps, an ack-text regex, an existence probe, and
+the class of bug DEVLOG § v0.5-R5 documents (a leaked slot closing the solo lane until restart) — this
+is the better trade.
+
+### Capability vs. memory load: why `orch_tool` survived an audit that deleted most of the gate
+
+The obvious move was to replace the tool with `git worktree` lines in the manuals and cut ~1,000
+lines. It was rejected on the owner's own constraint — *minimize what the model has to remember* —
+because the tool is the cheapest possible memory device:
+
+- a tool schema is **passive**: present in every request, needing no recall, and discoverable without
+  loading anything;
+- a git recipe is **active**: the model must load the right manual, then reproduce the path
+  convention, the branch-exists case, the `.gitignore` entry, the `--diff-filter=U` read **before**
+  `git merge --abort` (skip it and a `MERGE_HEAD` pollutes the tree every later worker reads), and the
+  solo/base-branch question — correctly, every time, in every preset that never loaded the manual.
+
+One schema (~1KB, one-time) against prose that recurs in two manuals *and* fails silently when
+misremembered. Keeping it also keeps the lazy bootstrap where it belongs — code, not memory: the
+repository is the load-bearing wall for everything downstream, so it must not depend on the model
+recalling `git init -b main`. Discipline for that wall: exactly one tool, three actions, no new ones.
+
+### Platform facts verified for these deletions (the ledger cites them, so they are recorded)
+
+Grepped out of `app.asar` on the install this profile runs:
+
+- `subagent.maxDepth` is a **Host setting** (default `1`, user-editable; "depth `1` permits direct
+  children only", "changes apply on the next delegation attempt"), and the delegation tool "stays
+  visible at the cap — each attempted start checks the calling agent's current depth and rejects with
+  an errored result" (`dsh-tool-subagent`). A plugin hard-coding depth 1 was overriding the operator.
+- `spawn_teammate` / `interrupt_agent` are Lead-only **by execution** in the Teams composition
+  ("All nine Team schemas are identical for Leads and teammates; execution enforces Lead-only
+  operations").
+- `subagent/start` / `subagent/end` are a platform-checked pair (`fail('subagent/end has no matching
+  subagent/start for run …')`), and `ctx.agents.list()` / `isOwnedBy(id, parent)` / `agent.status` are
+  documented live-agent queries ("`get(id)`, `list()`, and `roots()` find live agents") with
+  `ctx.agents.list().some(...)` as the platform's own idiom. This was the planned replacement for the
+  registry; S2 made the count unnecessary altogether, so the plugin now consults **no** agent state.
+  If a future rule needs "who is running", that is the API to use — not a new map.
+
+### The bootstrap notice had a home to go to
+
+`note()` in `lib/workspace.js` was the audit trail's only non-gate user, and the message it wrote
+matters: a directory becoming a repository changes DSH's own project-root resolution, so the user must
+hear about it. It now returns through the `create` result (`note` field, rendered ahead of the
+dispatch hint), which is where the model can actually act on it. `lib/audit.js` is deleted with it.
+
+### Also in this release
+
+- Dead code removed: `git.js` `lastCommitFiles` / `displayPath` and their `node:path` import.
+- The executor handbook lost its verbatim bootstrap recipe (a second source of truth for the same
+  three commands, now owned by the tool) and its solo-lane guard.
+- Both manuals and the protocol section were rewritten to the new boundary. The protocol's
+  "Supremacy / trivial never licenses direct action" clause is gone: it contradicted the gate that
+  replaced it.
+- Preset description and the generator's emitted header changed in lockstep (regenerating
+  reproduces the shipped patch; the `description:` scalar was reworded to avoid `": "`, which YAML
+  plain scalars cannot carry).
+- History above this line describes the machinery as it was when written; several sections name
+  mechanisms that no longer exist (per the standing convention, they are left as written).
+
+### What to watch in practice
+
+1. Does the coordinator actually dispatch work worth backgrounding now that nothing forces it? If
+   direct edits start swallowing tasks that should have been parallel, the fix is protocol wording —
+   not a gate.
+2. Lane rule false positives: shell that mentions `.worktrees/` plus a destructive verb is denied even
+   when harmless (`cp .worktrees/x/file ./backup`). Deliberate: over-blocking a read-ish command costs
+   one rephrased call; missing a lane wipe costs a worker's uncommitted afternoon.
+3. The `feature_id` trigger for package validation is a string test. A prose prompt that merely
+   mentions `feature_id` gets told why it was refused; if that ever bites in real use, narrow the
+   trigger to the fenced-JSON block instead of the whole prompt.
+
 ## v1.0.3 — capability global, enforcement preset-scoped
 
 Owner requirement: "I want this plugin usable in every preset. The difference is that orch-lite
@@ -676,11 +789,19 @@ Deliberate DSH-specific deviations from the original:
 `test/plugin.test.mjs` (dev-only: shipped in the repository, excluded from the
 pack by the `files` list) drives the real plugin against a stubbed ctx
 (subprocess over execFile, fs over node:fs, registries + event bus mirroring
-scoped dispatch): 116 checks covering tool behavior, all gate allow/deny paths,
-skill registration from the bundled manuals, the host row, boot injection, the
-packaging invariants, the repository bootstrap, the audit trail, and freshness
-guards (no shipped file may still name the retired per-action tools; both
-manuals stay under the pruner threshold). Run: `node test/plugin.test.mjs .`.
+scoped dispatch): the work-area tool against a real git repository (idempotence,
+holder fallback, merge success/conflict rollback, dirty refusal, lazy bootstrap
+and the notice it returns), every gate branch — project write allowed, lane write
+denied, external-effect shell denied, lane reads and in-repo git allowed, opt-in
+package validation including the "not our dispatch" pass-through, workers not
+routed at all, unknown agents failing open — plus the worker hint, skill
+registration and the host row, the packaging invariants, and freshness guards.
+The guards are what keep the slimming from rotting: no shipped file may still
+name a retired mechanism (`worktree_create`, `audit.log`, `EXECUTOR_DENIED_TOOLS`,
+`solo lane`, "never writes files"), nothing may import the retired audit module,
+the handbook may not restate the bootstrap the tool owns, both manuals stay under
+the pruner threshold, and the preset `description:` must stay a YAML-safe plain
+scalar. Run: `node test/plugin.test.mjs .`.
 
 ## Language policy
 

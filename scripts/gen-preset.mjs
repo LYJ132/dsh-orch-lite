@@ -47,8 +47,8 @@ if (insertAt === -1) throw new Error('expected a `tool-plugin-manager` row to an
 const OURS = [
 	'',
 	'          # --- dsh-orch-lite ---------------------------------------------',
-	'          # This preset row registers the protocol section, the boot-context',
-	'          # injection and the enforcement gate, all scoped to this preset.',
+	'          # This preset row registers the protocol section, the worker hint',
+	'          # and the gate, all scoped to this preset.',
 	'          # The two manuals and the `orch_tool` work-area tool are registered',
 	'          # by the host row at the bottom of this patch. See DEVLOG.md.',
 	'          - id: orch',
@@ -66,10 +66,10 @@ const OURS = [
 
 const HEADER = [
 	'# Agent preset `orch-lite`: the `standard` composition plus the routing',
-	'# discipline and the dispatch gate.',
+	'# discipline and the work-area gate.',
 	'#',
 	'# Two rows ship in this patch:',
-	'#   `preset-orch-lite` — the preset itself (protocol section, boot injection,',
+	'#   `preset-orch-lite` — the preset itself (protocol section, worker hint,',
 	'#   gate); it exists only for sessions that select it;',
 	'#   `orch-lite-host` — a HOST row publishing the two manuals AND the `orch_tool`',
 	'#   work-area tool into the GLOBAL layers, so every preset can load the manuals',
@@ -87,7 +87,7 @@ const HEADER = [
 ]
 
 const DESCRIPTION =
-	'Main session coordinates only. One continuable agent per feature branch (gate-enforced package, worktree isolation); wide read-only sweeps run as one-shot explore agents.'
+	'Coordinates background work — one continuable agent per feature branch, each owning a git work area; wide read-only sweeps run as one-shot explore agents. A gate keeps the main session out of worker lanes and off commands that leave the repository.'
 
 const out = [
 	...HEADER,

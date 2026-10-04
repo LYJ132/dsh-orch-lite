@@ -1,7 +1,7 @@
 {
   "name": "dsh-orch-lite",
-  "version": "1.0.3",
-  "description": "Agent preset that keeps the main session coordinating: one continuable agent per feature branch, worktree isolation only when workers run concurrently (solo lane protected by synchronous pending slots), one-shot explore agents for read-only sweeps, lazy git-repo bootstrap for write work in a fresh folder; main-session writes and mutating shells are denied, every decision written to $DSH_HOME/orch-lite/audit.log. The two manuals and the orch_tool work-area tool are published globally, so every preset can read the manuals and use the tool; the enforcement (protocol section, boot injection, gate) stays scoped to this preset.",
+  "version": "1.1.0",
+  "description": "Agent preset that keeps the main session orchestrating: one continuable agent per feature branch, each owning a git work area (.worktrees/<feature_id>) allocated by the orch_tool work-area tool; one-shot explore agents for wide read-only sweeps; a lazy git-repository bootstrap when a write task lands in a fresh folder. The gate denies the main session exactly two things — writes inside a worker lane, and shell commands whose effects leave the repository (push, publish, gh) — and validates only dispatch packages that declare a feature_id. The two manuals and the tool are published globally, so every preset can use them; the enforcement (protocol section, worker hint, gate) stays scoped to this preset.",
   "type": "module",
   "main": "lib/index.js",
   "exports": {

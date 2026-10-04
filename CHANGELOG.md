@@ -4,7 +4,37 @@ All notable changes to this bundle. Rationale for each decision lives in `DEVLOG
 the short form. Dates are omitted on purpose — the project is developed in a single continuous line
 and `DEVLOG.md` carries the ordering.
 
-## 1.0.3 — the work-area tool goes global (plus repository hygiene)
+## 1.1.0 — the gate stopped locking the door on everyone else
+
+The bundle's enforcement was cut back to the one accident git cannot undo. Rationale, the ledger and
+the platform evidence are in `DEVLOG.md` § v1.1.0.
+
+- **The main session writes its own project files again.** `write` / `edit` and mutating shell are no
+  longer denied outright; they are denied **inside a worker lane** (`.worktrees/<feature_id>/`) and for
+  commands whose effects leave the repository (`git push`, package publishing, `gh pr` / `gh release`).
+  Installs, `git checkout` / `merge` / `commit`, branch work and redirects all pass. A skill with its
+  own "write this file" convention is no longer blocked by us.
+- **Feature-package validation is opt-in.** A dispatch is checked only when it declares a `feature_id`
+  or points at the executor handbook; any other `subagent` / `subagent_fork` call passes untouched.
+- **Every write task owns a work area.** The solo/concurrent fork is gone: `orch_tool({ action:
+  "create" })` before dispatch, `worktree` required in the package. This is what let the concurrency
+  machinery go.
+- **Deleted**: the executor dispatch ban (the Host's `subagent.maxDepth`, default `1` and
+  user-tunable, plus the platform's Lead-only team rules already cover it), the `explore` package
+  check, the live-worker registry, the synchronous pending slots, the `post-execute` ack parser, the
+  worktree shape/existence probes, and the durable `audit.log` trail (deleted together with
+  `lib/audit.js`).
+- **Kept, deliberately**: the `orch_tool` three actions and the lazy repository bootstrap — a tool
+  asks the model to remember one id, prose asks it to remember recipes and error branches — plus
+  `feature_id` validation (the one place model text becomes a path we write) and `orch_tool merge`'s
+  conflict rollback + conflicted-file listing.
+- **The bootstrap notice now rides in the tool result**, so the coordinator tells the user their
+  directory became a git repository instead of writing it to a log nobody reads.
+- Manuals and the protocol section rewritten to the new boundary; the "trivial never licenses direct
+  action" supremacy clause removed (it contradicted the gate that replaced it). Dead code dropped
+  (`lastCommitFiles`, `displayPath`). Test suite rewritten to the new contract.
+- Breaking for dispatch senders: a feature package without `worktree` is now refused, and the `into`
+  parameter is only needed when the primary tree itself sits on the feature branch.
 
 - **One tool instead of three.** `worktree_create` / `worktree_merge` / `worktree_remove` collapse
   into `orch_tool({ action: "create" | "merge" | "remove", feature_id, base?, into? })`. Same
