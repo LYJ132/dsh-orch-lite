@@ -179,7 +179,7 @@ const rejects = async (name, fn) => {
 // --- registration -----------------------------------------------------------
 
 check('the one work-area tool is registered by the host half', [...registered.keys()].join(',') === 'orch_tool', [...registered.keys()].join(', '))
-check('the tool takes the three actions', ['create', 'merge', 'remove'].every(a => registered.get('orch_tool').parameters.properties.action.enum.includes(a)))
+check('the tool takes the five actions', ['create', 'merge', 'remove', 'list', 'doctor'].every(a => registered.get('orch_tool').parameters.properties.action.enum.includes(a)))
 const protocol = sections.find(s => s.name === 'orch-lite:protocol')
 check('protocol section at order 2850, interpolate false', protocol?.order === 2850 && protocol?.interpolate === false)
 check('protocol has no silent empty state (no scope guard)', typeof protocol?.text === 'function' && protocol.text({ scope: 'any-scope' }).startsWith('# Mode: orch-lite'))
@@ -530,8 +530,65 @@ check('user files stay untracked (only .gitignore was claimed)', !tracked.includ
 check('the user file is untouched', readFileSync(join(bare, 'notes.txt'), 'utf8').includes('user content'))
 check('ignored entries were written', readFileSync(join(bare, '.gitignore'), 'utf8').includes('.worktrees/'))
 
+// --- list: the observable state of work areas -------------------------------
+
+await callTool('remove', { feature_id: 'login' })
+const listed = await callTool('list', {})
+check('list reports the live docs area', listed.areas.some(a => a.feature_id === 'docs' && a.branch === 'feature/docs'), JSON.stringify(listed.areas))
+check('list reports the path of each area', listed.areas.every(a => a.path.includes('.worktrees')), JSON.stringify(listed.areas.map(a => a.path)))
+check('list names feature branches with no active area', listed.branches.includes('feature/login') && listed.branches.includes('feature/rival'), JSON.stringify(listed.branches))
+check('list is read-only: no repository was touched for it', existsSync(join(root, '.worktrees', 'login', 'dirty.txt')) === false)
+
+// --- doctor: the isolation-model hygiene scan -------------------------------
+
+// The docs area holds unmerged work — it must not be reported as stale.
+writeFileSync(join(root, '.worktrees', 'docs', 'in-progress.txt'), 'wip', 'utf8')
+await git(['-C', join(root, '.worktrees', 'docs'), 'add', '.'])
+await git(['-C', join(root, '.worktrees', 'docs'), '-c', 'user.name=docs', '-c', 'user.email=docs@orch-lite.local', 'commit', '-qm', 'feat: docs work in progress'])
+
+const doc = await callTool('doctor', {})
+check('doctor reports the integration branch', doc.integration_branch === 'main', doc.integration_branch)
+check('doctor finds no dirty areas', doc.dirty.length === 0, JSON.stringify(doc.dirty))
+check('doctor finds no stale areas', doc.stale.length === 0, JSON.stringify(doc.stale))
+check('doctor finds no bypassed commits', doc.bypassed.length === 0, JSON.stringify(doc.bypassed))
+
+// doctor's two failure modes, in turn:
+// 1. a dirty area
+writeFileSync(join(root, '.worktrees', 'docs', 'uncommitted.txt'), 'x', 'utf8')
+const docDirty = await callTool('doctor', {})
+check('doctor reports a dirty area', docDirty.dirty.some(d => d.branch === 'feature/docs' && d.files.includes('uncommitted.txt')), JSON.stringify(docDirty.dirty))
+rmSync(join(root, '.worktrees', 'docs', 'uncommitted.txt'))
+
+// 2. a feature_id commit that landed directly on the integration branch
+await git(['checkout', 'main', '-q'])
+await writeFileSync(join(root, 'bypassed.txt'), 'y', 'utf8')
+await git(['add', '.'])
+await git(['-c', 'user.name=login', '-c', 'user.email=login@orch-lite.local', 'commit', '-qm', 'login: direct commit on main'])
+const docBypassed = await callTool('doctor', {})
+check('doctor reports a feature_id commit on the integration branch', docBypassed.bypassed.some(b => b.author === 'login' && b.subject.includes('direct commit on main')), JSON.stringify(docBypassed.bypassed))
+await git(['reset', '--hard', 'HEAD~1', '-q'])
+
+// 3. a stale area: a feature whose branch is already merged still holds its area
+await callTool('create', { feature_id: 'stale-demo' })
+writeFileSync(join(root, '.worktrees', 'stale-demo', 'stale.txt'), 'z', 'utf8')
+await git(['-C', join(root, '.worktrees', 'stale-demo'), 'add', '.'])
+await git(['-C', join(root, '.worktrees', 'stale-demo'), '-c', 'user.name=stale-demo', '-c', 'user.email=stale-demo@orch-lite.local', 'commit', '-qm', 'feat: stale demo'])
+await git(['merge', '--no-edit', 'feature/stale-demo', '-q'])
+const docStale = await callTool('doctor', {})
+check('doctor reports a work area whose branch is already merged', docStale.stale.some(s => s.branch === 'feature/stale-demo'), JSON.stringify(docStale.stale))
+check('a merged feature is not a bypass', docStale.bypassed.every(b => b.author !== 'stale-demo'), JSON.stringify(docStale.bypassed))
+
+// --- the read-only actions need no repository and never bootstrap -----------
+
+const bareList = mkdtempSync(join(tmpdir(), 'orch-norepo-list-'))
+const bareListExec = { signal: new AbortController().signal, agent: { session: { header: { cwd: bareList, id: 'no-repo-list' } } } }
+await rejects('list refuses a non-repository workspace', () => registered.get('orch_tool').execute({ action: 'list', feature_id: 'x' }, bareListExec))
+await rejects('doctor refuses a non-repository workspace', () => registered.get('orch_tool').execute({ action: 'doctor', feature_id: 'x' }, bareListExec))
+check('the read-only actions created no repository', !existsSync(join(bareList, '.git')))
+
 rmSync(root, { recursive: true, force: true })
 rmSync(bare, { recursive: true, force: true })
+rmSync(bareList, { recursive: true, force: true })
 
 console.log(`\n${passed}/${passed + failed} passed`)
 if (warnings.length > 0) console.log(`warnings: ${warnings.join(' | ')}`)

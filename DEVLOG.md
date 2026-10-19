@@ -4,6 +4,81 @@ Decision history and rationale for this plugin. Plugin code, skills, prompts,
 and tool messages carry only current rules and runtime facts; the "why we did
 it this way" lives here.
 
+## v1.2.0 — the work-area state became observable instead of remembered
+
+The v1.1.0 slimming removed the state machinery (live-worker registry, pending slots, audit log)
+because every fact it held was either derivable from git or irrelevant. That left exactly one
+question the plugin could not answer at all: **what is the state of my work areas right now?**
+
+The coordinator had to remember which feature ids it created, which were still live, which had been
+retired, and which had been left dirty by an agent that reported DONE without committing. A
+forgotten area stayed on disk forever; a stale one made the next `create` reuse a directory the
+user thought was gone. This is the model's memory doing work the tool could do — and by the
+project's own standard (the v1.1.0 cut ledger: *a new mechanism must defend something irreversible
+and severe*) the honest question is not "is a forgotten area severe" but "is there a way to make
+the state observable at all". There is, and it is read-only.
+
+### Why two actions and not one
+
+`list` and `doctor` answer different questions and the split is what keeps the cheap one cheap:
+
+- `list` — **what exists?** Every area under `.worktrees/` with its path, branch and dirty state,
+  plus every feature branch that has no area. This is the inventory the coordinator needs before
+  dispatching, and it is cheap enough to call casually.
+- `doctor` — **what is wrong?** Three findings, all derivable from git alone:
+  1. a dirty area (the agent did not commit before reporting DONE — uncommitted work dies with
+     the area, which is the one genuinely irreversible thing in the whole model);
+  2. a stale area (its branch is merged and has no commit of its own left — the area is dead
+     weight and can be retired);
+  3. a bypassed commit (a feature agent's commit that landed directly on the integration branch —
+     the isolation model was circumvented, which is exactly the accident the whole design exists to
+     prevent).
+
+Merging them into one action would force the cheap inventory to pay for the dirty-file scans. They
+stay separate, and neither takes a `feature_id` — there is no feature to name when you are asking
+about all of them.
+
+### The two judgements the doctor actually has to make
+
+Both are places where the obvious implementation reports a fiction, so they are worth recording.
+
+**Stale ≠ merged.** `git branch --merged` without a ref judges against HEAD. After a
+fast-forward integration, HEAD already carries the feature, so *every* branch reads as merged and
+the answer means nothing. The doctor asks the real question instead — is the branch merged into
+the **integration branch** (`main`, or whatever the primary tree is on) — and then adds the
+condition that makes the area dead weight: the branch has no commit of its own left
+(`git rev-list --count <integration>..<branch>` is zero). A branch that never committed anything
+shares main's tip and is merged by definition, while its area is perfectly alive; without the
+second condition every freshly created area would read as stale.
+
+**Bypassed ≠ slug-shaped author.** The first implementation treated any commit whose author
+matched the feature-id slug pattern as a bypass, and the test suite caught it immediately: the
+fixture's ordinary git user was named `t`, which is a valid slug. A human git user can be named
+anything, so the author name alone cannot carry the verdict. What does carry it is the identity the
+executor handbook already fixes — `<feature_id>` / `<feature_id>@orch-lite.local` — combined with
+excluding every commit a feature branch still carries, so that a legitimate fast-forward
+integration of the feature's own commits is not reported as a bypass.
+
+### What was deliberately NOT added
+
+- **No new action that writes.** v1.1.0's discipline was "exactly one tool, three actions, no new
+  ones" — the point being that the *write* wall (create / merge / remove) must stay small, because
+  every additional write action is another recipe the model can half-remember. The two new actions
+  are read-only diagnostics: they cannot create, move or destroy anything, so they add no write
+  recipe to remember. The wall is untouched; what was added is a window onto it.
+- **No state file.** Everything reported is read from git at call time. A `doctor` that kept a
+  registry would be the v1.0 machinery again, with the drift and the lifecycle that came with it.
+- **No automatic cleanup.** `doctor` reports; it never removes. A stale area is a decision (the
+  user may still want the branch), and the tool that retires areas is `remove`, which already
+  refuses a dirty one.
+- **No new enforcement.** Both actions are read-only diagnostics. Nothing about them can deny a
+  call, so the gate's contract is unchanged: the main session still writes its own files, and the
+  lane is still the only thing it may not touch.
+- **No platform dependency.** The upstream orch-lite 1.3.x answers this with a `doctor` CLI in
+  Python; this bundle has no Python and no CLI, so the same facts are answered inside the tool
+  that already owns the areas. The DSH platform's own `create_worktree` tool is create-only and
+  off by default — it is not a substitute, and it is not the mechanism here.
+
 ## v1.1.0 — the slimming: from "the coordinator cannot act" to "nobody touches a worker's lane"
 
 Owner-led audit of v1.0.3: the bundle had grown enforcement that locked *other people's* skills out

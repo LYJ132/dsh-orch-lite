@@ -120,3 +120,34 @@
 - 观察 DEVLOG § v1.1.0 "What to watch" 三条：该后台化的活是否仍被派发、通道规则误伤、纯文本里出现 `feature_id` 会不会误拦
 
 ---
+
+### 2026-10-04 - v1.2.0：工作区状态可观测（list / doctor）
+
+**动机（来自与 zcode orch-lite 1.3.1 的对照）**：1.1.0 删掉全部状态机后，插件唯一答不上来的问题是"我现在的工作区是什么状态"。协调者只能靠记忆追踪自己建过哪些 feature_id、哪些还活着、哪些已退休；忘了的 worktree 就永远留在磁盘上。上游 1.3.x 用一个 `doctor` CLI 回答，本包没有 Python 也没有 CLI，因此在拥有工作区的那个工具里回答。
+
+**已完成**：
+- `orch_tool` 增加两个**只读**动作：`list`（`.worktrees/` 下所有工作区 + 路径 + 分支 + 脏状态，以及没有活动工作区的 feature 分支）、`doctor`（集成分支、脏工作区、陈旧工作区、越权提交）
+- 工具 schema 的 `feature_id` 由必填改为可选（`create`/`merge`/`remove` 内部仍强制 slug 校验）；`list`/`doctor` 不需要仓库、不 bootstrap、不碰工作树
+- `git.js` 新增 `listBranches` / `mergedBranches(git, cwd, ref, signal)`；`mergedBranches` 必须带 ref——`git branch --merged` 不带 ref 时以 HEAD 为准，而 fast-forward 集成后 HEAD 已经带着该分支，结果对所有分支都为真、等于没有信息
+- 陈旧判据是"已合并且自己没有独有提交"（`git rev-list --count <integration>..<branch>` 为 0），否则刚建还没提交的工作区会被全部误报
+- 越权判据用执行者手册规定的提交身份 `<feature_id>` / `<feature_id>@orch-lite.local`，**不**只看作者名（作者名是 slug 不足以定罪——测试夹具里普通 git 用户叫 `t` 立刻暴露了这个误报），并排除所有 feature 分支承载的提交，使合法 fast-forward 集成不被误报
+- 文档同步：DEVLOG 新开 § v1.2.0、CHANGELOG 1.2.0、README（工具描述 + 布局表 + 验收第 11 步）、协调手册新增"Seeing the work areas"一节、协议段同步
+- `package.json` → 1.2.0
+
+**遇到的问题及解决方案**：
+- `git branch --list` 对"在别的 worktree 里 checkout 的分支"打的是 `+` 而不是 `*`，解析要同时剥 `[*+]`
+- `git log --not` 的参数不能带 `^` 前缀（那是 rev-parse 语法，不是 log 的排除语法）
+- 手册正文一度 8401 字符越过 8192 的 pruner 阈值，压缩措辞后回到 7985（余量 207）；顺带删掉了"只读 shell 总是通过"后面的举例
+
+**注意事项**：
+- 1.1.0 的纪律是"恰好一个工具、三个动作、别再加"——本轮没有违反它：**新增的两个动作不写任何东西**，写墙（create/merge/remove）原封不动，加的是一扇窗
+- doctor 只报告不清理；陈旧工作区的处置权在用户，退休仍然是 `remove`
+- 平台自带的 `create_worktree`（dsh-experimental-tool-worktree）默认关闭且只做创建，不构成替代，也不是本包的机制
+- **`description == feature_id` 的强制尚未处理**：DSH 平台层的 `childId` 由平台生成（`continuation.js` 里 `spec.childId ?? brandString(randomUUID())`），分发结果回传、`send_message` 回传链路都不依赖 `description`；因此在 DSH 上这个强制只增加模型认知负荷和失败概率，与"让 description 说明子代理是干嘛的"这一目的相反。zcode 1.3.1 同样强制是因为它没有平台 id。**待用户拍板后再改**
+
+**下一步计划**：
+- `npm test` 已跑：136/136 通过
+- 打包 1.2.0 安装验收（`npm pack` + `install_bundle` + 重启宿主 + 新会话，按 README 11 步清单）
+- 观察 doctor 的三类发现是否真的被用到，而不是变成噪音
+
+---

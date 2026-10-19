@@ -33,8 +33,11 @@ work (`pnpm install`, `git checkout`) that a `git` command or a sentence reverse
 
 Rationale and the risk ledger behind each cut: `DEVLOG.md` § v1.1.0.
 
-The one tool it registers is `orch_tool`, with three actions: `create` (allocate `.worktrees/<feature_id>/`),
-`merge` (integrate the feature branch) and `remove` (retire the work area; the branch always survives).
+The one tool it registers is `orch_tool`, with five actions: `create` (allocate `.worktrees/<feature_id>/`),
+`merge` (integrate the feature branch), `remove` (retire the work area; the branch always survives),
+`list` (read-only: every work area and every feature branch without one) and `doctor` (read-only: work-area
+hygiene — dirty areas, areas whose branch is already merged, and feature-id commits that landed directly
+on the integration branch).
 Next to it the bundle ships two runtime skills — `orch-lite` (coordinator manual) and
 `orch-lite-executor` (worker handbook) — also registered **globally**. Only enforcement is
 preset-scoped. A session outside the preset therefore gets the discipline and the tool but no
@@ -87,6 +90,9 @@ Two platform behaviours matter here:
    knowledge and capability global, enforcement scoped.
 10. From a worker session, try delegating: the platform answers with the depth error (Host
     `subagent.maxDepth`, default `1`) — not with an orch-lite reason.
+11. Call `orch_tool({ action: "list" })` and `orch_tool({ action: "doctor" })`: both are read-only, both
+    report the work areas without touching the repository, and `doctor` names the dirty, stale and
+    bypassed cases. Neither needs a `feature_id`.
 
 ## Layout
 
@@ -94,7 +100,7 @@ Two platform behaviours matter here:
 |---|---|
 | `lib/index.js` | preset half: protocol section, gate wiring, worker hint |
 | `lib/host.js` | host half: publishes the two manuals **and** `orch_tool` into the global layers (exported as `dsh-orch-lite/host`) |
-| `lib/tool.js` | the one work-area tool (`create` / `merge` / `remove`) |
+| `lib/tool.js` | the one work-area tool (`create` / `merge` / `remove` / `list` / `doctor`) |
 | `lib/workspace.js` | repository resolution, lazy bootstrap, `.gitignore`, feature-id validation |
 | `lib/gate.js` | the enforcement rules as pure functions (worker-lane path test, external-effect shell, opt-in package validation, agent classification) |
 | `lib/git.js` | the plugin's only subprocess boundary (git, argv-based, bounded, deadline-guarded) |

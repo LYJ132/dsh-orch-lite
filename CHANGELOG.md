@@ -4,6 +4,33 @@ All notable changes to this bundle. Rationale for each decision lives in `DEVLOG
 the short form. Dates are omitted on purpose — the project is developed in a single continuous line
 and `DEVLOG.md` carries the ordering.
 
+## 1.2.0 — the work-area state became observable instead of remembered
+
+The isolation model has one blind spot: nothing could report the state of the work areas. The
+coordinator had to remember which feature ids it created, which were still live, and which had
+already been retired — and a forgotten area stayed on disk forever. The upstream orch-lite 1.3.x
+answers this with a `doctor` command; this release answers it inside the tool that owns the areas.
+
+- **`orch_tool` gains two read-only actions.** `list` reports every work area under `.worktrees/`
+  (path, branch, dirty state) plus every feature branch that has no active area; `doctor` reports
+  the integration branch, dirty areas, stale areas (branch already merged, nothing unique left on
+  it), and bypassed commits (a feature-agent commit that landed directly on the integration
+  branch). Neither takes a `feature_id`; neither touches the working tree; neither bootstraps a
+  repository.
+- **`feature_id` is now optional on the tool.** It was required by the schema even though the
+  read-only actions have no feature to name; it is still required by `create` / `merge` / `remove`
+  and still validated as a slug there.
+- **Stale detection judges the integration branch, not HEAD.** `git branch --merged` without a ref
+  judges against HEAD, which after a fast-forward integration already carries the feature — the
+  answer would be true for every branch and mean nothing. A branch is stale only when it is merged
+  AND has no commit of its own left, which is what makes its area dead weight.
+- **Bypass detection uses the agent's commit identity.** The executor handbook fixes a feature
+  agent's identity to `<feature_id>` / `<feature_id>@orch-lite.local`; a slug-shaped author alone
+  is not enough, because a human git user can be named anything. Commits carried by a feature
+  branch are excluded, so a legitimate fast-forward integration is not reported as a bypass.
+- Test suite extended to 136 checks, covering both new actions, their three doctor findings, and
+  the guarantee that the read-only actions never create a repository.
+
 ## 1.1.0 — the gate stopped locking the door on everyone else
 
 The bundle's enforcement was cut back to the one accident git cannot undo. Rationale, the ledger and

@@ -18,7 +18,7 @@ A gate runs on every tool call in your session, and it is small on purpose:
 - **Commands leaving the repository are denied** — `git push`, package publishing, `gh pr` / `gh release`. Those are the user's decisions.
 - **A package carrying `feature_id` is checked** against the Feature package shape below (`description` must equal `feature_id`, and a `worktree` is required). Any other dispatch is not the gate's business.
 
-A rejection is the design working: stop, emit your `[routing]` line, route. Never retry around it. Read-only shell always passes (`ls`, `cat`, `rg`, `git status/log/diff/show`).
+A rejection is the design working: stop, emit your `[routing]` line, route. Never retry around it. Read-only shell always passes.
 
 ## Language
 
@@ -94,6 +94,15 @@ READ FIRST: reload skill orch-lite-executor; write area is .worktrees/<feature_i
 
 1. `orch_tool({ action: "merge", feature_id })` — merges into the currently checked-out branch; confirm it with a read-only `git status`, and pass `into: "<target>"` when that is not where the work belongs. On CONFLICT it rolls back and lists files: **never auto-resolve** — hand it to the user.
 2. `orch_tool({ action: "remove", feature_id })` — after DONE and after the merge. Branches are never removed; a dirty area is refused (resume the agent to commit first).
+
+## Seeing the work areas
+
+Use the read-only actions instead of remembering the state.
+
+- `orch_tool({ action: "list" })` — every area under `.worktrees/` (path, branch, dirty state) plus every feature branch with no area.
+- `orch_tool({ action: "doctor" })` — **dirty** areas (DONE without committing), **stale** areas (branch merged, nothing left), **bypassed** commits (a feature agent's commit landed on the integration branch).
+
+Neither takes a `feature_id` or touches anything; `doctor` never removes — retiring is `remove`, your call.
 
 ## When stuck
 
