@@ -4,7 +4,32 @@ Decision history and rationale for this plugin. Plugin code, skills, prompts,
 and tool messages carry only current rules and runtime facts; the "why we did
 it this way" lives here.
 
-## v1.2.0 — the work-area state became observable instead of remembered
+## The version-number discipline (owner rule, 2026-10-04)
+
+**A patch bump (the third number, e.g. 1.1.0 → 1.1.1) is the agent's call. A minor or major bump
+(the second or first number, e.g. 1.1.x → 1.2.0) is the owner's call — the agent must not make it
+on its own, and must not tag, publish or push such a version.**
+
+The rule exists because the version line is the project's release contract, not a bookkeeping
+detail: it says what a user may install and what changed underneath them. A minor bump announces
+new capability and a contract change; whether a change *deserves* one is a product judgement about
+the user, not a mechanical one about the diff. A patch bump announces a fix inside an existing
+contract, and there the diff speaks for itself.
+
+Concretely, for every change:
+
+- **patch (third number)** — bump it, write the CHANGELOG section, tag it, push it. No permission
+  needed; a fix or a documentation correction does not need the owner to decide anything.
+- **minor or major (second or first number)** — ask first. Present what changed and what the bump
+  would signal, then let the owner choose the number. If the owner does not answer, ship as a
+  patch and say so.
+
+The v1.2.0 release of this file broke the rule: two new tool actions were added and the second
+number was raised without the owner deciding it. The release was re-cut as **v1.1.1** on the same
+commit, and the v1.2.0 tag was withdrawn. The content did not change — only the number it shipped
+under, which is exactly the part that was not the agent's to choose.
+
+## v1.1.1 — the work-area state became observable instead of remembered
 
 The v1.1.0 slimming removed the state machinery (live-worker registry, pending slots, audit log)
 because every fact it held was either derivable from git or irrelevant. That left exactly one

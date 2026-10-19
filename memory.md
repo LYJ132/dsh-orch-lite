@@ -4,6 +4,23 @@
 
 ---
 
+## ⚠️ 版本号纪律（owner 定，2026-10-04）
+
+- **三级版本号（patch，如 1.1.0 → 1.1.1）：agent 自己决定**，改 CHANGELOG、打 tag、推送，都不用问。
+- **二级及以上（minor / major，如 1.1.x → 1.2.0）：必须由 owner 定**。agent 不得自行决定，也不得
+  自行打 tag、发布或推送这样的版本——要先把"改了什么、这个号在对外声明什么"讲清楚，等 owner
+  定号；owner 没答复就按 patch 出，并说明这一点。
+
+理由：版本线是发布契约，不是记账细节。它对外声明"用户可以装什么、底下改了什么"。加能力、改契约
+是否配得上一次 minor 升级，是对用户的判断，不是对 diff 的机械判断；而 patch 声明的是既有契约内
+的修复，diff 自己就能说明。
+
+**已发生的违反**：v1.1.1 的内容最初以 `v1.2.0` 发布（加了两个只读动作），第二个数由 agent 自行
+抬高了。已改回 `v1.1.1` 重新发布，v1.2.0 的 tag 撤回。内容没变，变的只是发布时所用的号——而那
+恰恰不是 agent 该替 owner 决定的部分。详见 `DEVLOG.md` § *The version-number discipline*。
+
+---
+
 ## 会话记录
 
 ### 2026-10-02 - 历史重建与开源发布（open-source release）
@@ -121,7 +138,7 @@
 
 ---
 
-### 2026-10-04 - v1.2.0：工作区状态可观测（list / doctor）
+### 2026-10-04 - v1.1.1：工作区状态可观测（list / doctor）
 
 **动机（来自与 zcode orch-lite 1.3.1 的对照）**：1.1.0 删掉全部状态机后，插件唯一答不上来的问题是"我现在的工作区是什么状态"。协调者只能靠记忆追踪自己建过哪些 feature_id、哪些还活着、哪些已退休；忘了的 worktree 就永远留在磁盘上。上游 1.3.x 用一个 `doctor` CLI 回答，本包没有 Python 也没有 CLI，因此在拥有工作区的那个工具里回答。
 
@@ -131,8 +148,8 @@
 - `git.js` 新增 `listBranches` / `mergedBranches(git, cwd, ref, signal)`；`mergedBranches` 必须带 ref——`git branch --merged` 不带 ref 时以 HEAD 为准，而 fast-forward 集成后 HEAD 已经带着该分支，结果对所有分支都为真、等于没有信息
 - 陈旧判据是"已合并且自己没有独有提交"（`git rev-list --count <integration>..<branch>` 为 0），否则刚建还没提交的工作区会被全部误报
 - 越权判据用执行者手册规定的提交身份 `<feature_id>` / `<feature_id>@orch-lite.local`，**不**只看作者名（作者名是 slug 不足以定罪——测试夹具里普通 git 用户叫 `t` 立刻暴露了这个误报），并排除所有 feature 分支承载的提交，使合法 fast-forward 集成不被误报
-- 文档同步：DEVLOG 新开 § v1.2.0、CHANGELOG 1.2.0、README（工具描述 + 布局表 + 验收第 11 步）、协调手册新增"Seeing the work areas"一节、协议段同步
-- `package.json` → 1.2.0
+- 文档同步：DEVLOG 新开 § v1.1.1、CHANGELOG 1.1.1、README（工具描述 + 布局表 + 验收第 11 步）、协调手册新增"Seeing the work areas"一节、协议段同步
+- `package.json` → 1.1.1
 
 **遇到的问题及解决方案**：
 - `git branch --list` 对"在别的 worktree 里 checkout 的分支"打的是 `+` 而不是 `*`，解析要同时剥 `[*+]`
@@ -147,7 +164,7 @@
 
 **下一步计划**：
 - `npm test` 已跑：136/136 通过
-- 打包 1.2.0 安装验收（`npm pack` + `install_bundle` + 重启宿主 + 新会话，按 README 11 步清单）
+- 打包 1.1.1 安装验收（`npm pack` + `install_bundle` + 重启宿主 + 新会话，按 README 11 步清单）
 - 观察 doctor 的三类发现是否真的被用到，而不是变成噪音
 
 ---

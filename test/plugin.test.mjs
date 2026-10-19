@@ -294,6 +294,30 @@ check('both skills registered', skills.has('orch-lite') && skills.has('orch-lite
 	check('the manifest exports the host subpath', manifest.exports?.['./host'] === './lib/host.js')
 	check('the pack file list includes the module directory', Array.isArray(manifest.files) && manifest.files.includes('lib'))
 }
+
+// --- the version-number discipline --------------------------------------------
+//
+// The manifest version and the top CHANGELOG section must name the same
+// release: a bump that touches one but not the other is how a "published"
+// version ends up describing something else. The minor/major rule itself is
+// an owner decision and cannot be asserted here — the DEVLOG records it, and
+// this check makes sure the file that records it stays in place.
+
+{
+	const manifest = JSON.parse(readFileSync(join(pkg, 'package.json'), 'utf8'))
+	const version = manifest.version
+	const changelog = readFileSync(join(pkg, 'CHANGELOG.md'), 'utf8')
+	const top = changelog.match(/^## (\d+\.\d+\.\d+)/m)
+	check('the manifest version is a three-part version', /^\d+\.\d+\.\d+$/.test(version ?? ''), String(version))
+	check('the CHANGELOG opens with the manifest version', top?.[1] === version, `changelog: ${top?.[1]}, manifest: ${version}`)
+	const devlog = readFileSync(join(pkg, 'DEVLOG.md'), 'utf8')
+	check(
+		'the DEVLOG states the version-number discipline (patch is the agent\'s, minor and up are the owner\'s)',
+		devlog.includes('The version-number discipline') &&
+			devlog.includes('is the agent\'s call') &&
+			devlog.includes("is the owner's call"),
+	)
+}
 check('no registration warnings', warnings.length === 0, warnings.join(' | '))
 
 // --- worker hint --------------------------------------------------------------
