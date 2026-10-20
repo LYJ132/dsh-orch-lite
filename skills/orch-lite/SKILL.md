@@ -37,7 +37,7 @@ Two invariants carry the rest: work is **committed before DONE** (you retire wor
 One route — the work area never depends on who else is running:
 
 1. `orch_tool({ action: "create", feature_id })` → `.worktrees/<fid>/` on branch `feature/<fid>` (idempotent; a `reused` + `note` return names the real path).
-2. `subagent({ description: "<feature_id>", prompt })` with `"worktree"` set to that exact path. The description is free-form and no longer bound to `feature_id`.
+2. `subagent({ description: "<a free-form label saying what the agent does>", prompt })` with `"worktree"` set to that exact path. The description is free-form and is not bound to `feature_id` — the package's `feature_id` is what names the branch and the work area.
 3. If the feature already has an agent, check the roster where one exists: `inactive` → resume it; `running` → await its settlement notice.
 
 The area is what makes merge, cleanup, a crashed agent and a hand-off all routine — it costs one call. Wide read-only sweeps go to `explore` and never get one.
