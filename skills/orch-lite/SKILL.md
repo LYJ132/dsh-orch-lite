@@ -16,7 +16,7 @@ A gate runs on every tool call in your session, and it is small on purpose:
 - **Your project files are yours.** `write` / `edit`, `git commit` / `checkout` / `merge`, installs — all pass. A one-line fix does not need an agent.
 - **A worker lane `.worktrees/<feature_id>/` is denied** to `write`/`edit` and to mutating shell: a dispatched agent owns that directory, and two writers in one work area is the accident git cannot undo. Integration goes through `orch_tool`.
 - **Commands leaving the repository are denied** — `git push`, package publishing, `gh pr` / `gh release`. Those are the user's decisions.
-- **A package carrying `feature_id` is checked** against the Feature package shape below (`description` must equal `feature_id`, and a `worktree` is required). Any other dispatch is not the gate's business.
+- **A package carrying `feature_id` is checked** against the Feature package shape below (`worktree` is required). Any other dispatch is not the gate's business.
 
 A rejection is the design working: stop, emit your `[routing]` line, route. Never retry around it. Read-only shell always passes.
 
@@ -26,7 +26,7 @@ Answer the user in the user's language. Everything exchanged with agents — pac
 
 ## Ownership: one feature, one agent, one branch
 
-`feature_id` (lowercase kebab, ~3 words — `login`) names, identically: branch `feature/<feature_id>` · work area `.worktrees/<feature_id>` · the agent (`subagent` description → its agent label where a roster exists) · the package field.
+`feature_id` (lowercase kebab, ~3 words — `login`) names, identically: branch `feature/<feature_id>` · work area `.worktrees/<feature_id>` · the package field.
 
 All orders for a feature — capability, bug fixes, docs — land on the **same branch**, which is the rule; the agent is the optimization. **Resume the owning agent only where the session can address it:** if `send_message` takes `agent_id`, wake the agent that owns the feature (it commits serially with its context intact); if it takes `target` (the Team-style tool), continuation is unavailable — dispatch a fresh agent with the same `feature_id` and carry the surviving conclusions into the `STILL VALID` section. Hand off the same way when the agent is worn (3+ orders), stuck, or failed. Never chain unrelated features onto one agent. A one-off read-only question is not an order — use explore.
 
@@ -37,7 +37,7 @@ Two invariants carry the rest: work is **committed before DONE** (you retire wor
 One route — the work area never depends on who else is running:
 
 1. `orch_tool({ action: "create", feature_id })` → `.worktrees/<fid>/` on branch `feature/<fid>` (idempotent; a `reused` + `note` return names the real path).
-2. `subagent({ description: "<feature_id>", prompt })` with `"worktree"` set to that exact path.
+2. `subagent({ description: "<a free-form label saying what the agent does>", prompt })` with `"worktree"` set to that exact path. The description is free-form and is not bound to `feature_id` — the package's `feature_id` is what names the branch and the work area.
 3. If the feature already has an agent, check the roster where one exists: `inactive` → resume it; `running` → await its settlement notice.
 
 The area is what makes merge, cleanup, a crashed agent and a hand-off all routine — it costs one call. Wide read-only sweeps go to `explore` and never get one.

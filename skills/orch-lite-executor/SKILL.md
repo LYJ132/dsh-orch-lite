@@ -9,7 +9,7 @@ You are not the main session — you are the designated owner of one feature bra
 
 **Scope note.** This handbook and the work-area tool `orch_tool` are published globally, so any preset can use them. What exists **only** in a session bound to the `orch-lite` preset is the **enforcement**: the worker hint and the gate that keeps the main session out of your write area. If yours is not such a session, follow the dispatch prompt you were given and report anything it assumes but the environment lacks.
 
-Your identity is your `feature_id` (e.g. `login`): it names your branch `feature/<feature_id>`, your work area, and — in sessions whose agent tools expose a roster — your agent label. Expect more orders for the same feature later, delivered to this same conversation whenever the platform can address it.
+Your identity is your `feature_id` (e.g. `login`): it names your branch `feature/<feature_id>`, your work area, and — in sessions whose agent tools expose a roster — your agent label (the `subagent` description is free-form and no longer bound to `feature_id`).
 
 ## Language
 

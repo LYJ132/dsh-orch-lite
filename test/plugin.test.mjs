@@ -400,8 +400,8 @@ check('no registration warnings', warnings.length === 0, warnings.join(' | '))
 	const good = featurePrompt({ feature_id: 'login', objective: 'o', acceptance_criteria: ['c'], worktree: '.worktrees/login' })
 	check('gate passes a compliant feature package', gate({ agent: MAIN, name: 'subagent', arguments: { description: 'login', prompt: good } }).nextCalled)
 	check(
-		'gate rejects description != feature_id',
-		gate({ agent: MAIN, name: 'subagent', arguments: { description: 'Login feature', prompt: good } }).decision?.kind === 'deny',
+		'gate accepts free-form description (no longer bound to feature_id)',
+		gate({ agent: MAIN, name: 'subagent', arguments: { description: 'Login feature', prompt: good } }).nextCalled,
 	)
 	check(
 		'gate rejects a missing handbook pointer',
