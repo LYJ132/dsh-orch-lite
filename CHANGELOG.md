@@ -33,6 +33,10 @@ answers this with a `doctor` command; this release answers it inside the tool th
   branch are excluded, so a legitimate fast-forward integration is not reported as a bypass.
 - Test suite extended to 136 checks, covering both new actions, their three doctor findings, and
   the guarantee that the read-only actions never create a repository.
+- **`description` is no longer bound to `feature_id`.** The gate no longer enforces that the
+  `subagent` description equals `feature_id` — the platform carries a durable child id and display
+  label separately, so the binding added nothing to resumption and only increased model failure
+  rate. The upstream zcode orch-lite 1.3.1 enforces it because it lacks a platform-generated id.
 
 ## 1.1.0 — the gate stopped locking the door on everyone else
 
