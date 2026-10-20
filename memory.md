@@ -160,7 +160,7 @@
 - 1.1.0 的纪律是"恰好一个工具、三个动作、别再加"——本轮没有违反它：**新增的两个动作不写任何东西**，写墙（create/merge/remove）原封不动，加的是一扇窗
 - doctor 只报告不清理；陈旧工作区的处置权在用户，退休仍然是 `remove`
 - 平台自带的 `create_worktree`（dsh-experimental-tool-worktree）默认关闭且只做创建，不构成替代，也不是本包的机制
-- **`description == feature_id` 的强制尚未处理**：DSH 平台层的 `childId` 由平台生成（`continuation.js` 里 `spec.childId ?? brandString(randomUUID())`），分发结果回传、`send_message` 回传链路都不依赖 `description`；因此在 DSH 上这个强制只增加模型认知负荷和失败概率，与"让 description 说明子代理是干嘛的"这一目的相反。zcode 1.3.1 同样强制是因为它没有平台 id。**待用户拍板后再改**
+- **`description == feature_id` 的强制已移除**：DSH 平台层的 `childId` 由平台生成（`continuation.js` 里 `spec.childId ?? brandString(randomUUID())`），分发结果回传、`send_message` 回传链路都不依赖 `description`；因此在 DSH 上这个强制只增加模型认知负荷和失败概率，与"让 description 说明子代理是干嘛的"这一目的相反。zcode 1.3.1 同样强制是因为它没有平台 id。**已完成**：删除了 `lib/gate.js` 的 `BINDING_REASON` 常量与校验逻辑，反转测试断言，更新了所有文档（README、CHANGELOG、DEVLOG、两份手册、协议段、工具描述）。
 
 **下一步计划**：
 - `npm test` 已跑：136/136 通过
