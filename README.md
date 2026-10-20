@@ -11,8 +11,8 @@ and imports nothing from the platform.
 | A worker's work area stays its own | a `tools/pre-execute` gate denies main-session `write` / `edit` and lane-destroying shell inside `.worktrees/<feature_id>/` — two writers in one area is the accident git cannot undo |
 | Nothing leaves the repository unasked | `git push`, package publishing and `gh pr` / `gh release` are denied; those are the user's decisions |
 | Every write task owns a work area | `orch_tool({ action: "create", feature_id })` before the dispatch; a feature package without a `worktree` field is refused |
-| Feature dispatches carry a real contract | package validation — fenced JSON, `feature_id` / `objective` / `acceptance_criteria` / `worktree`, `description` verbatim equal to `feature_id`, handbook pointer — applied **only** to a dispatch that declares a `feature_id` |
-| One agent per feature branch | `feature_id` names the branch, the work area, the agent label and the package field; follow-up orders resume the same agent where the session can address it |
+| Feature dispatches carry a real contract | package validation — fenced JSON, `feature_id` / `objective` / `acceptance_criteria` / `worktree`, handbook pointer — applied **only** to a dispatch that declares a `feature_id` |
+| One agent per feature branch | `feature_id` names the branch, the work area and the package field; follow-up orders resume the same agent where the session can address it |
 | Wide reads never consume a feature agent | one-shot `explore` agents answer read-only sweeps and settle |
 | A fresh folder can still take work | lazy repository bootstrap on the first `create`: `git init -b main`, `.gitignore`, a baseline commit staging only `.gitignore`; the notice rides back in the tool result |
 | Knowledge and capability are shared, enforcement is not | a host row publishes the two manuals **and** the `orch_tool` work-area tool into the **global** layers, so every preset can load the manuals and call the tool; the protocol section, the worker hint and the gate stay scoped to the `orch-lite` preset |
