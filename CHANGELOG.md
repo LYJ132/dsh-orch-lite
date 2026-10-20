@@ -4,12 +4,15 @@ All notable changes to this bundle. Rationale for each decision lives in `DEVLOG
 the short form. Dates are omitted on purpose — the project is developed in a single continuous line
 and `DEVLOG.md` carries the ordering.
 
-## 1.1.1 — the work-area state became observable instead of remembered
+## 1.1.1 — the work-area state became observable, and the agent label is free-form
 
 The isolation model has one blind spot: nothing could report the state of the work areas. The
 coordinator had to remember which feature ids it created, which were still live, and which had
 already been retired — and a forgotten area stayed on disk forever. The upstream orch-lite 1.3.x
 answers this with a `doctor` command; this release answers it inside the tool that owns the areas.
+
+The same release stops binding the agent's display label to the feature id, so the label can say
+what the agent does instead of repeating a slug.
 
 > Version-number note: this shipped first as `v1.2.0` and was re-cut as `v1.1.1`. The second
 > number is the owner's call, not the agent's — see `DEVLOG.md` § *The version-number discipline*.
