@@ -104,6 +104,22 @@ integration of the feature's own commits is not reported as a bypass.
   that already owns the areas. The DSH platform's own `create_worktree` tool is create-only and
   off by default — it is not a substitute, and it is not the mechanism here.
 
+### Description binding removed (this feature)
+
+The gate's `BINDING_REASON` check (lines 85–88 in the old `lib/gate.js`) that rejected a dispatch
+when `description !== feature_id` has been removed. DSH's platform layer carries a durable child id
+(`spec.childId ?? brandString(randomUUID())` in `@deepseek-ai/dsh-subagent/lib/continuation.js`)
+and a durable display label (`spec.label`) as two separate things. Continuation uses the durable
+child id via `send_message`, not the label, so binding the label to `feature_id` adds nothing to
+resumption. The upstream zcode orch-lite 1.3.1 enforces this equality only because it has no
+platform-generated id — the description is its sole resume handle. On DSH that argument does not
+hold.
+
+The check's removal also deletes the `BINDING_REASON` constant and updates the test suite to
+assert that a free-form description passes. Documentation in `README.md`, `CHANGELOG.md`,
+`lib/index.js`, `lib/tool.js`, and both skills has been updated to reflect that the description
+is free-form.
+
 ## v1.1.0 — the slimming: from "the coordinator cannot act" to "nobody touches a worker's lane"
 
 Owner-led audit of v1.0.3: the bundle had grown enforcement that locked *other people's* skills out
