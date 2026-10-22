@@ -13,7 +13,7 @@ and imports nothing from the platform.
 | Every write task owns a work area | `orch_tool({ action: "create", feature_id })` before the dispatch; a feature package without a `worktree` field is refused |
 | Feature dispatches carry a real contract | package validation — fenced JSON, `feature_id` / `objective` / `acceptance_criteria` / `worktree`, handbook pointer — applied **only** to a dispatch that declares a `feature_id` |
 | One agent per feature branch | `feature_id` names the branch, the work area and the package field; follow-up orders resume the same agent where the session can address it |
-| Wide reads never consume a feature agent | one-shot `explore` agents answer read-only sweeps and settle |
+| Wide reads never consume a feature agent | `explore` agents answer read-only sweeps; the platform decides continuability by provider (spawn defines `prepareContinuable`); no `backgroundMode` config or `run_in_background` parameter exists |
 | A fresh folder can still take work | lazy repository bootstrap on the first `create`: `git init -b main`, `.gitignore`, a baseline commit staging only `.gitignore`; the notice rides back in the tool result |
 | Knowledge and capability are shared, enforcement is not | a host row publishes the two manuals **and** the `orch_tool` work-area tool into the **global** layers, so every preset can load the manuals and call the tool; the protocol section, the worker hint and the gate stay scoped to the `orch-lite` preset |
 
