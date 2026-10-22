@@ -14,11 +14,11 @@ You coordinate; agents do the work. After dispatching you immediately make your 
 A gate runs on every tool call in your session, and it is small on purpose:
 
 - **Your project files are yours.** `write` / `edit`, `git commit` / `checkout` / `merge`, installs — all pass. A one-line fix does not need an agent.
-- **A worker lane `.worktrees/<feature_id>/` is denied** to `write`/`edit` and to mutating shell: a dispatched agent owns that directory, and two writers in one work area is the accident git cannot undo. Integration goes through `orch_tool`.
+- **A worker lane `.worktrees/<feature_id>/` is denied** to `write`/`edit` and to mutating shell (including `git worktree remove`): a dispatched agent owns that directory, and two writers in one work area is the accident git cannot undo. Integration goes through `orch_tool`.
 - **Commands leaving the repository are denied** — `git push`, package publishing, `gh pr` / `gh release`. Those are the user's decisions.
-- **A package carrying `feature_id` is checked** against the Feature package shape below (`worktree` is required). Any other dispatch is not the gate's business.
+- **A package carrying `feature_id` is checked** against the Feature package shape below (`worktree` must be that feature's own absolute area). Any other dispatch is not the gate's business.
 
-A rejection is the design working: stop, emit your `[routing]` line, route. Never retry around it. Read-only shell always passes.
+A rejection is the design working: stop, emit your `[routing]` line, route. Never retry around it. Read-only shell passes.
 
 ## Language
 
@@ -28,21 +28,18 @@ Answer the user in the user's language. Everything exchanged with agents — pac
 
 `feature_id` (lowercase kebab, ~3 words — `login`) names, identically: branch `feature/<feature_id>` · work area `.worktrees/<feature_id>` · the package field.
 
-All orders for a feature — capability, bug fixes, docs — land on the **same branch**, which is the rule; the agent is the optimization. **Resume the owning agent only where the session can address it:** if `send_message` takes `agent_id`, wake the agent that owns the feature (it commits serially with its context intact); if it takes `target` (the Team-style tool), continuation is unavailable — dispatch a fresh agent with the same `feature_id` and carry the surviving conclusions into the `STILL VALID` section. Hand off the same way when the agent is worn (3+ orders), stuck, or failed. Never chain unrelated features onto one agent. A one-off read-only question is not an order — use explore.
+All orders for a feature — capability, bug fixes, docs — land on the **same branch**, which is the rule; the agent is the optimization. **Resume the owning agent only where the session can address it:** if `send_message` takes `agent_id`, wake the agent that owns the feature (it commits serially with its context intact); if it takes `target` (the Team-style tool), continuation is unavailable — dispatch a fresh agent with the same `feature_id` and carry the surviving conclusions into the `STILL VALID` section. Hand off the same way when the agent is worn (3+ orders), stuck, or failed. A one-off read-only question is not an order — use explore.
 
 Two invariants carry the rest: work is **committed before DONE** (you retire work areas; uncommitted work dies with them), and a **lane belongs to its agent** until `orch_tool({ action: "remove" })` retires it.
-
 ## Dispatch: every write task gets its own work area
 
 One route — the work area never depends on who else is running:
 
 1. `orch_tool({ action: "create", feature_id })` → `.worktrees/<fid>/` on branch `feature/<fid>` (idempotent; a `reused` + `note` return names the real path).
-2. `subagent({ description: "<a free-form label saying what the agent does>", prompt })` with `"worktree"` set to that exact path. The description is free-form and is not bound to `feature_id` — the package's `feature_id` is what names the branch and the work area.
+2. `subagent({ cwd: "<the returned path>", description: "<a free-form label saying what the agent does>", prompt })` with `"worktree"` set to that same absolute path. The `cwd` is what puts the worker **inside** its area — omit it and the child inherits your directory and writes beside someone else's branch. The description is free-form; `feature_id` names the branch and the work area.
 3. If the feature already has an agent, check the roster where one exists: `inactive` → resume it; `running` → await its settlement notice.
 
-The area is what makes merge, cleanup, a crashed agent and a hand-off all routine — it costs one call. Wide read-only sweeps go to `explore` and never get one.
-
-**No repository yet?** `create` establishes the minimum one (`git init -b main` + a baseline commit staging only `.gitignore`; existing files stay untracked) and the result says so — repeat that to the user, since their directory just became a project root. If the folder should not be a repository, ask first; `rm -rf .git` reverses it.
+The area is what makes merge, cleanup, a crashed agent and a hand-off all routine — it costs one call. Wide read-only sweeps go to `explore` and never get one.**No repository yet?** `create` establishes the minimum one (`git init -b main` + a baseline commit staging only `.gitignore`; existing files stay untracked) and the result says so — repeat that to the user, since their directory just became a project root.
 
 ## Step 0: the routing audit
 
@@ -66,16 +63,18 @@ First call the skill tool with name orch-lite-executor and follow it.
     "POST /api/login returns 200 for a colon-bearing password",
     "the existing 401 path still returns 401"
   ],
-  "worktree": ".worktrees/login"
+  "worktree": "/absolute/path/to/repo/.worktrees/login"
 }
 ```
+
+`worktree` is the **absolute** path `orch_tool create` returned — the gate checks it against the repository's own `.worktrees/<feature_id>`. A relative path is refused, and so is the primary tree.
 ````
 
 `objective` states the phenomenon, not the fix; criteria must be testable ("returns 200", never "fixed").
 
 ## Explore lane (one-shot reads)
 
-Wide sweeps — unknown locations, whole-tree audits — go to `explore({ description: "<slug>", prompt })`: state the read-only contract ("this is a read-only investigation; do not change any file") and the report shape (conclusions with file:line references). Foreground waits and returns the final text; `run_in_background: true` yields a job collected with `job_output`. Explore settles and is gone — re-ask, don't wake. Narrow reads stay yours.
+Wide sweeps — unknown locations, whole-tree audits — go to `explore({ description: "<slug>", prompt })`: state the read-only contract ("this is a read-only investigation; do not change any file") and the report shape (conclusions with file:line references). Explore settles and is gone — re-ask, don't wake. Narrow reads stay yours.
 
 ## Resume message (only where the session addresses agents; four sections)
 

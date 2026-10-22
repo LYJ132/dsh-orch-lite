@@ -17,9 +17,16 @@ Every message you send, reports included, is in English — whatever language th
 
 ## Your write area
 
-The package's `"worktree"` field names it, e.g. `.worktrees/login`. That directory is already checked out on `feature/<feature_id>`; it is the only place you may write.
+The package's `"worktree"` field names it — the absolute path of your work area, e.g. `/path/to/repo/.worktrees/login`. That directory is already checked out on `feature/<feature_id>`; it is the only place you may write.
 
-- **Missing or wrong path?** Do not improvise a location, and never fall back to the primary working tree — another feature may live there. Report STUCK and name what you were given.
+**Check before your first write:**
+
+```bash
+git rev-parse --show-toplevel   # must be your work area (…/.worktrees/<feature_id>)
+git branch --show-current       # must be feature/<feature_id>
+```
+
+- **Either answer is wrong?** Do not improvise a location, and never fall back to the primary working tree — another feature may live there. Report STUCK and name what you were given.
 - **Read-only prompt?** Then change nothing — answer instead.
 - Never commit on a branch other than `feature/<feature_id>`, and never from a directory that is not yours.
 
