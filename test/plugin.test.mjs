@@ -116,11 +116,11 @@ hostHalf.apply(ctx)
 const emit = async (point, payload) => {
 	for (const listener of listeners.get(point) ?? []) await listener(payload)
 }
-const gate = (exec) => {
+const gate = async (exec) => {
 	let nextCalled = false
 	let decision
 	for (const listener of listeners.get('tools/pre-execute') ?? []) {
-		decision = listener({ ...exec, signal: new AbortController().signal }, () => {
+		decision = await listener({ ...exec, signal: new AbortController().signal }, () => {
 			nextCalled = true
 			return { kind: 'allow' }
 		})
@@ -340,38 +340,38 @@ check('no registration warnings', warnings.length === 0, warnings.join(' | '))
 // --- gate: main-session writes --------------------------------------------------
 
 {
-	const own = gate({ agent: MAIN, name: 'write', arguments: { file_path: join(root, 'src', 'app.ts'), content: 'x' } })
+	const own = await gate({ agent: MAIN, name: 'write', arguments: { file_path: join(root, 'src', 'app.ts'), content: 'x' } })
 	check('the coordinator may write its own project files', own.nextCalled, own.decision?.reason)
-	const ownRelative = gate({ agent: MAIN, name: 'edit', arguments: { file_path: 'README.md' } })
+	const ownRelative = await gate({ agent: MAIN, name: 'edit', arguments: { file_path: 'README.md' } })
 	check('a relative project path passes too', ownRelative.nextCalled)
-	const lane = gate({ agent: MAIN, name: 'write', arguments: { file_path: join(root, '.worktrees', 'login', 'app.js'), content: 'x' } })
+	const lane = await gate({ agent: MAIN, name: 'write', arguments: { file_path: join(root, '.worktrees', 'login', 'app.js'), content: 'x' } })
 	check('gate denies writing into a worker lane', lane.decision?.kind === 'deny' && lane.decision.reason.includes('worker lane'), lane.decision?.reason)
-	const laneRelative = gate({ agent: MAIN, name: 'edit', arguments: { file_path: '.worktrees/login/app.js' } })
+	const laneRelative = await gate({ agent: MAIN, name: 'edit', arguments: { file_path: '.worktrees/login/app.js' } })
 	check('the lane test covers relative paths as well', laneRelative.decision?.kind === 'deny')
-	const laneDir = gate({ agent: MAIN, name: 'write', arguments: { file_path: '.worktrees' } })
+	const laneDir = await gate({ agent: MAIN, name: 'write', arguments: { file_path: '.worktrees' } })
 	check('the lane directory itself is denied', laneDir.decision?.kind === 'deny')
-	const lookalike = gate({ agent: MAIN, name: 'write', arguments: { file_path: 'worktrees/login/app.js' } })
+	const lookalike = await gate({ agent: MAIN, name: 'write', arguments: { file_path: 'worktrees/login/app.js' } })
 	check('a directory merely named like the lane passes', lookalike.nextCalled, lookalike.decision?.reason)
-	const otherPathKey = gate({ agent: MAIN, name: 'write', arguments: { path: '.worktrees/login/app.js' } })
+	const otherPathKey = await gate({ agent: MAIN, name: 'write', arguments: { path: '.worktrees/login/app.js' } })
 	check('the other file-path argument name is honoured', otherPathKey.decision?.kind === 'deny')
-	const noPath = gate({ agent: MAIN, name: 'write', arguments: {} })
+	const noPath = await gate({ agent: MAIN, name: 'write', arguments: {} })
 	check('a write the gate cannot read passes (fail open)', noPath.nextCalled)
 }
 
 // --- gate: shell ----------------------------------------------------------------
 
 {
-	const push = gate({ agent: MAIN, name: 'pwsh', arguments: { command: 'git -c user.name=x push origin main' } })
+	const push = await gate({ agent: MAIN, name: 'pwsh', arguments: { command: 'git -c user.name=x push origin main' } })
 	check('gate denies git push', push.decision?.kind === 'deny' && push.decision.reason.includes('outside the repository'), push.decision?.reason)
-	const publish = gate({ agent: MAIN, name: 'bash', arguments: { command: 'npm publish --access public' } })
+	const publish = await gate({ agent: MAIN, name: 'bash', arguments: { command: 'npm publish --access public' } })
 	check('gate denies package publishing', publish.decision?.kind === 'deny')
-	const gh = gate({ agent: MAIN, name: 'pwsh', arguments: { command: 'gh pr create --title x' } })
+	const gh = await gate({ agent: MAIN, name: 'pwsh', arguments: { command: 'gh pr create --title x' } })
 	check('gate denies a github write (gh pr)', gh.decision?.kind === 'deny')
-	const ghRead = gate({ agent: MAIN, name: 'pwsh', arguments: { command: 'gh run view 12345' } })
+	const ghRead = await gate({ agent: MAIN, name: 'pwsh', arguments: { command: 'gh run view 12345' } })
 	check('a gh read passes', ghRead.nextCalled, ghRead.decision?.reason)
-	const laneWipe = gate({ agent: MAIN, name: 'bash', arguments: { command: 'rm -rf .worktrees/login' } })
+	const laneWipe = await gate({ agent: MAIN, name: 'bash', arguments: { command: 'rm -rf .worktrees/login' } })
 	check('gate denies destroying a work area from the shell', laneWipe.decision?.kind === 'deny', laneWipe.decision?.reason)
-	const laneRead = gate({ agent: MAIN, name: 'pwsh', arguments: { command: 'Get-ChildItem .worktrees | Select-Object Name' } })
+	const laneRead = await gate({ agent: MAIN, name: 'pwsh', arguments: { command: 'Get-ChildItem .worktrees | Select-Object Name' } })
 	check('reading the lane directory passes', laneRead.nextCalled, laneRead.decision?.reason)
 	// The commands that used to be blocked and are the coordinator's ordinary work:
 	for (const [label, command] of [
@@ -382,12 +382,12 @@ check('no registration warnings', warnings.length === 0, warnings.join(' | '))
 		['redirect into a project file', 'rg -n "version" app.js > hits.txt'],
 		['project delete', 'Remove-Item src/old.ts'],
 	]) {
-		const r = gate({ agent: MAIN, name: 'pwsh', arguments: { command } })
+		const r = await gate({ agent: MAIN, name: 'pwsh', arguments: { command } })
 		check(`in-repo work passes (${label})`, r.nextCalled, r.decision?.reason)
 	}
-	const read = gate({ agent: MAIN, name: 'bash', arguments: { command: 'git status && git log -n 3 && git branch' } })
+	const read = await gate({ agent: MAIN, name: 'bash', arguments: { command: 'git status && git log -n 3 && git branch' } })
 	check('gate passes git status/log/branch-list', read.nextCalled)
-	const mergeTool = gate({ agent: MAIN, name: 'orch_tool', arguments: { action: 'merge', feature_id: 'login' } })
+	const mergeTool = await gate({ agent: MAIN, name: 'orch_tool', arguments: { action: 'merge', feature_id: 'login' } })
 	check('gate passes the integration tool', mergeTool.nextCalled)
 }
 
@@ -397,53 +397,53 @@ check('no registration warnings', warnings.length === 0, warnings.join(' | '))
 	const featurePrompt = (body) =>
 		'You are the login feature agent.\nFirst call the skill tool with name orch-lite-executor and follow it.\n' +
 		'```json\n' + JSON.stringify(body) + '\n```'
-	const good = featurePrompt({ feature_id: 'login', objective: 'o', acceptance_criteria: ['c'], worktree: '.worktrees/login' })
-	check('gate passes a compliant feature package', gate({ agent: MAIN, name: 'subagent', arguments: { description: 'login', prompt: good } }).nextCalled)
+	const good = featurePrompt({ feature_id: 'login', objective: 'o', acceptance_criteria: ['c'], worktree: join(root, '.worktrees', 'login') })
+	check('gate passes a compliant feature package', (await gate({ agent: MAIN, name: 'subagent', arguments: { description: 'login', prompt: good } })).nextCalled)
 	check(
 		'gate accepts free-form description (no longer bound to feature_id)',
-		gate({ agent: MAIN, name: 'subagent', arguments: { description: 'Login feature', prompt: good } }).nextCalled,
+		(await gate({ agent: MAIN, name: 'subagent', arguments: { description: 'Login feature', prompt: good } })).nextCalled,
 	)
 	check(
 		'gate rejects a missing handbook pointer',
-		gate({ agent: MAIN, name: 'subagent', arguments: { description: 'login', prompt: featurePrompt({ feature_id: 'login', objective: 'o', acceptance_criteria: ['c'], worktree: '.worktrees/login' }).replace('orch-lite-executor', 'other') } }).decision?.reason.includes('handbook'),
+		(await gate({ agent: MAIN, name: 'subagent', arguments: { description: 'login', prompt: featurePrompt({ feature_id: 'login', objective: 'o', acceptance_criteria: ['c'], worktree: join(root, '.worktrees', 'login') }).replace('orch-lite-executor', 'other') } })).decision?.reason.includes('handbook'),
 	)
 	const noWorktree = featurePrompt({ feature_id: 'login', objective: 'o', acceptance_criteria: ['c'] })
-	const missingArea = gate({ agent: MAIN, name: 'subagent', arguments: { description: 'login', prompt: noWorktree } })
+	const missingArea = await gate({ agent: MAIN, name: 'subagent', arguments: { description: 'login', prompt: noWorktree } })
 	check('a feature package without a work area is refused (S2)', missingArea.decision?.kind === 'deny' && missingArea.decision.reason.includes('worktree'), missingArea.decision?.reason)
-	const missingField = gate({ agent: MAIN, name: 'subagent', arguments: { description: 'login', prompt: featurePrompt({ feature_id: 'login', objective: 'o' }) } })
+	const missingField = await gate({ agent: MAIN, name: 'subagent', arguments: { description: 'login', prompt: featurePrompt({ feature_id: 'login', objective: 'o' }) } })
 	check('a feature package missing acceptance_criteria is refused', missingField.decision?.kind === 'deny')
-	const badId = gate({ agent: MAIN, name: 'subagent', arguments: { description: 'Login', prompt: featurePrompt({ feature_id: 'Login', objective: 'o', acceptance_criteria: ['c'], worktree: '.worktrees/login' }) } })
+	const badId = await gate({ agent: MAIN, name: 'subagent', arguments: { description: 'Login', prompt: featurePrompt({ feature_id: 'Login', objective: 'o', acceptance_criteria: ['c'], worktree: join(root, '.worktrees', 'login') }) } })
 	check('a non-kebab feature_id is refused', badId.decision?.kind === 'deny')
-	const prose = gate({ agent: MAIN, name: 'subagent', arguments: { description: 'summarize notes', prompt: 'Read memory/session.md and append today’s decisions. No structured package here.' } })
+	const prose = await gate({ agent: MAIN, name: 'subagent', arguments: { description: 'summarize notes', prompt: 'Read memory/session.md and append today’s decisions. No structured package here.' } })
 	check('a dispatch that is not a feature package passes (opt-in contract)', prose.nextCalled, prose.decision?.reason)
-	const otherSkill = gate({ agent: MAIN, name: 'subagent_fork', arguments: { description: 'remember', prompt: 'Load the memory skill and store this preference in the memory file.' } })
+	const otherSkill = await gate({ agent: MAIN, name: 'subagent_fork', arguments: { description: 'remember', prompt: 'Load the memory skill and store this preference in the memory file.' } })
 	check("another skill's own dispatch convention passes", otherSkill.nextCalled, otherSkill.decision?.reason)
-	const claimsButNoFence = gate({ agent: MAIN, name: 'subagent', arguments: { description: 'login', prompt: 'feature_id: login — but no fenced package at all' } })
+	const claimsButNoFence = await gate({ agent: MAIN, name: 'subagent', arguments: { description: 'login', prompt: 'feature_id: login — but no fenced package at all' } })
 	check('claiming a feature_id without a package is told why', claimsButNoFence.decision?.kind === 'deny' && claimsButNoFence.decision.reason.includes('feature_id'), claimsButNoFence.decision?.reason)
 	// M9 removed: explore carries no contract the gate could police.
-	const looseExplore = gate({ agent: MAIN, name: 'explore', arguments: { description: 'trace-auth', prompt: 'Find every token validation site and report with file:line.' } })
+	const looseExplore = await gate({ agent: MAIN, name: 'explore', arguments: { description: 'trace-auth', prompt: 'Find every token validation site and report with file:line.' } })
 	check('explore is no longer package-gated', looseExplore.nextCalled, looseExplore.decision?.reason)
 }
 
 // --- gate: children are not routed ------------------------------------------------
 
 {
-	const w = gate({ agent: CHILD, name: 'write', arguments: { file_path: '.worktrees/login/app.js', content: 'y' } })
+	const w = await gate({ agent: CHILD, name: 'write', arguments: { file_path: '.worktrees/login/app.js', content: 'y' } })
 	check('a worker writes inside its own area', w.nextCalled)
-	const d = gate({ agent: CHILD, name: 'subagent', arguments: { description: 'x', prompt: 'whatever' } })
+	const d = await gate({ agent: CHILD, name: 'subagent', arguments: { description: 'x', prompt: 'whatever' } })
 	check('a worker dispatch is left to the platform depth setting', d.nextCalled, d.decision?.reason)
-	const t = gate({ agent: CHILD, name: 'spawn_teammate', arguments: {} })
+	const t = await gate({ agent: CHILD, name: 'spawn_teammate', arguments: {} })
 	check('the plugin does not re-implement the Lead-only rule', t.nextCalled)
-	const p = gate({ agent: CHILD, name: 'workflow', arguments: {} })
+	const p = await gate({ agent: CHILD, name: 'workflow', arguments: {} })
 	check('the plugin does not gate workflow either', p.nextCalled)
 }
 
 // --- gate: unknown agents pass ------------------------------------------------------
 
 {
-	check('host-local calls (no agent) pass', gate({ name: 'write', arguments: {} }).nextCalled)
+	check('host-local calls (no agent) pass', (await gate({ name: 'write', arguments: {} })).nextCalled)
 	const foreign = { session: { header: { id: 'f', cwd: root, agentPreset: 'standard' } } }
-	check('foreign-preset sessions pass untouched', gate({ agent: foreign, name: 'write', arguments: { file_path: '.worktrees/login/x' } }).nextCalled)
+	check('foreign-preset sessions pass untouched', (await gate({ agent: foreign, name: 'write', arguments: { file_path: '.worktrees/login/x' } })).nextCalled)
 }
 
 // --- slug validation ----------------------------------------------------------
