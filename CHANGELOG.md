@@ -21,6 +21,10 @@ Protocol, coordinator manual, and the drift guard (the two dead tokens are now r
 updated together. The `explore` tool itself is unchanged — this is the audit's vocabulary, not a
 lane removal.
 
+- The package trigger that 1.1.2 documented ("a fenced package, not a prose mention") is now the
+  code: validation fires on a fence mentioning `feature_id`/`objective` or on the handbook
+  pointer. Test suite: 147 checks.
+
 ## 1.1.2 — the work-area contract holds
 
 A review of the upstream orch-lite 1.3.2 found defects in this bundle. Each was weighed against the

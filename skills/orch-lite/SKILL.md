@@ -16,7 +16,7 @@ A gate runs on every tool call in your session, and it is small on purpose:
 - **Your project files are yours.** `write` / `edit`, `git commit` / `checkout` / `merge`, installs — all pass. A one-line fix does not need an agent.
 - **A worker lane `.worktrees/<feature_id>/` is denied** to `write`/`edit` and to mutating shell (including `git worktree remove`): a dispatched agent owns that directory, and two writers in one work area is the accident git cannot undo. Integration goes through `orch_tool`.
 - **Commands leaving the repository are denied** — `git push`, package publishing, `gh pr` / `gh release`. Those are the user's decisions.
-- **A package carrying `feature_id` is checked** against the Feature package shape below (`worktree` must be that feature's own absolute area). Any other dispatch is not the gate's business.
+- **A package is checked only when one is present**: a fenced block mentioning `feature_id`, or the handbook pointer, triggers the shape check below (`worktree` must be the feature's own absolute area); bare prose is not.
 
 A rejection is the design working: stop, emit your `[routing]` line, route. Never retry around it. Read-only shell passes.
 
