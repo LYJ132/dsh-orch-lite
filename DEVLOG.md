@@ -29,6 +29,60 @@ number was raised without the owner deciding it. The release was re-cut as **v1.
 commit, and the v1.2.0 tag was withdrawn. The content did not change — only the number it shipped
 under, which is exactly the part that was not the agent's to choose.
 
+## v1.1.2 — the review triage: which findings deserve a mechanism
+
+The upstream 1.3.2 review (REVIEW-orch-lite-1.3.2.md, 2026-10-22) reproduced 17 findings against
+this bundle. The triage applied the standing rule — *irreversible and severe, or prompt discipline*
+(§ v1.1.0) — and added one corollary the review forced into the open: **a missing instruction the
+manual promises is itself a hole in the mechanism**, because the model follows the manual into the
+accident.
+
+**Fixed — irreversible or silent:**
+
+1. *The worker never entered its area.* `subagent` accepts `cwd`; the protocol never passed it.
+   Every other guard assumed the worker was inside `.worktrees/<fid>/`; it was not, and nothing
+   said so — the coordinator believed the manual while the child wrote in the primary tree. Fixed
+   at all three layers: protocol text, tool result, executor handbook check.
+2. *The lane test trusted the session cwd.* Sessions opened in a subdirectory left every real lane
+   unprotected — same failure class as 1, opposite direction (guard lies instead of manual). The
+   root now comes from the same `repositoryFor` the tool uses; the pure function folds `.`/`..`
+   before comparing.
+3. *`worktree: "."` meant the primary tree.* The gate required the field's presence, so the one
+   value that defeats the entire model passed. Now the field must equal `<root>/.worktrees/<fid>`.
+4. *`git worktree remove --force` from the shell skipped the dirty check* that `orch_tool remove`
+   performs — the uncommitted-afternoon accident, reachable with a sanctioned command. Same rule,
+   widened vocabulary; no new machinery.
+5. *`backgroundMode: one-shot` never existed on this platform* and schemastery passed it silently.
+   The explore lane's stated behavior was a fiction inherited from the upstream port. Deleted; the
+   real exemption (the gate does not inspect explore dispatches) documented instead.
+6. *The gate trusted the creation header's preset.* The platform's own comment: the header names
+   what a session STARTED with; switches outlive the blank window. A switched-in session ran the
+   protocol with no gate — enforcement silently absent while the manual claimed it. The live value
+   is the `agentPreset` Session projection; the header became the fallback.
+7. *Bootstrap adopted user folders.* "Turn their directory into a project root" is announcement-
+   able but not undoable by git; empty-or-ours only now, refusal through the tool result.
+8. The smaller silent-wrongnesses: unknown tool parameters (typo'd arguments vanished), `into`
+   rejected legitimate branch names, `base` accepted option injection, uncommitted primary-tree
+   files invisible at allocation, the stale finding mislabeled ("already merged" for a fresh area
+   that merely sits behind main), the assertSlug text still quoting the deleted description
+   binding, and the package trigger firing on prose that mentions `feature_id` (watch item 3 of
+   § v1.1.0, remedy applied exactly as pre-recorded).
+
+**Left alone — recoverable, low-probability, or not yet happened:** `find .worktrees -delete` and
+the other shell spellings (over-match costs a rephrased call; every one is a prompt-discipline
+long tail — the rule already names what matters, § v1.1.0 watch item 2); a `worktree list`
+existence check inside the gate (the worker's own handbook check and the tool result already
+carry it); collapsing the routing states to three (our fifth state is a real platform lane
+upstream lacks); automatic cleanup (doctor reports, `remove` retires — deletion is the owner's);
+a child-id registry (receipts + `list_agents` are the platform's).
+
+**What the review got wrong** (recorded so the file is not re-trusted blindly): "continuation
+unavailable for `target`-style tools" is a two-branch statement about other platforms, not an
+inverted condition — DSH addresses children by `agent_id`; the branch for DSH was correct. The
+stale-while-fresh read it flagged as a bug is inherent to git-only state (no timestamp is a
+fact worth keeping); the label was corrected, the behavior kept. And the review's upstream fix
+for the bypassed-commit regex is exactly the code this bundle already runs.
+
 ## v1.1.1 — the work-area state became observable instead of remembered
 
 The v1.1.0 slimming removed the state machinery (live-worker registry, pending slots, audit log)

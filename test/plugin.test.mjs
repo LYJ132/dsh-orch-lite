@@ -251,7 +251,7 @@ check('both skills registered', skills.has('orch-lite') && skills.has('orch-lite
 		'skills/orch-lite-executor/SKILL.md',
 		'presets/orch-lite.patch.yml',
 	]
-	const retired = ['worktree_create', 'worktree_merge', 'worktree_remove', 'audit.log', 'BOOT_CONTRACT', 'EXECUTOR_DENIED_TOOLS', 'WORKTREE_REQUIRED_WHILE_BUSY', 'evaluateExplore', 'solo lane', 'never writes files']
+	const retired = ['worktree_create', 'worktree_merge', 'worktree_remove', 'audit.log', 'BOOT_CONTRACT', 'EXECUTOR_DENIED_TOOLS', 'WORKTREE_REQUIRED_WHILE_BUSY', 'evaluateExplore', 'solo lane', 'never writes files', 'one-shot', 'verbatim identical', 'settles and is gone', 'BINDING_REASON', 'description == feature_id']
 	const stale = shipped.flatMap(relative => retired.filter(term => read(relative).includes(term)).map(term => `${relative}: ${term}`))
 	check('no shipped file still names a retired mechanism', stale.length === 0, stale.join(', '))
 	const importers = shipped.filter(relative => /from '\.\/audit\.js'|require\('.\/audit\.js'\)/.test(read(relative)))
@@ -464,6 +464,21 @@ check('no registration warnings', warnings.length === 0, warnings.join(' | '))
 	check('host-local calls (no agent) pass', (await gate({ name: 'write', arguments: {} })).nextCalled)
 	const foreign = { session: { header: { id: 'f', cwd: root, agentPreset: 'standard' } } }
 	check('foreign-preset sessions pass untouched', (await gate({ agent: foreign, name: 'write', arguments: { file_path: '.worktrees/login/x' } })).nextCalled)
+	// The live preset is the `agentPreset` Session projection, not the creation
+	// header: a session that switched INTO orch-lite during its blank window is
+	// gated even though its header still says standard, and a session that
+	// switched away is released even though its header still says orch-lite.
+	ctx.sessionProjections = { stateOf: () => 'orch-lite' }
+	check(
+		'a switch into orch-lite is gated despite a stale header',
+		(await gate({ agent: foreign, name: 'write', arguments: { file_path: join(root, '.worktrees', 'login', 'x') } })).decision?.kind === 'deny',
+	)
+	ctx.sessionProjections = { stateOf: () => 'standard' }
+	check(
+		'a switch away from orch-lite releases the gate',
+		(await gate({ agent: MAIN, name: 'write', arguments: { file_path: join(root, '.worktrees', 'login', 'x') } })).nextCalled,
+	)
+	ctx.sessionProjections = undefined
 }
 
 // --- slug validation ----------------------------------------------------------
@@ -487,6 +502,23 @@ const fresh = await callTool('create', { feature_id: 'docs' })
 check('a new feature creates its area', fresh.created === true && fresh.branch === 'feature/docs')
 check('fresh work area directory exists', existsSync(join(root, '.worktrees', 'docs', 'app.js')))
 check('.gitignore gained .worktrees/', readFileSync(join(root, '.gitignore'), 'utf8').includes('.worktrees/'))
+
+// --- allocation reports what the fresh area will NOT contain --------------------
+// A new area is HEAD: the primary tree's uncommitted files are simply not in
+// it, and the worker discovering that mid-task is a surprise worth one line
+// at allocation time.
+writeFileSync(join(root, 'uncommitted-note.txt'), 'wip\n', 'utf8')
+const withNotice = await callTool('create', { feature_id: 'noted' })
+check(
+	'create reports the primary tree uncommitted files',
+	Array.isArray(withNotice.primary_tree_dirty) && withNotice.primary_tree_dirty.includes('uncommitted-note.txt'),
+	JSON.stringify(withNotice.primary_tree_dirty),
+)
+check('the render carries the heads-up', registered.get('orch_tool').output.render({}, withNotice)[0].text.includes('Heads-up'))
+check('the dispatch hint passes the area as the child cwd', registered.get('orch_tool').output.render({}, withNotice)[0].text.includes('cwd'))
+rmSync(join(root, 'uncommitted-note.txt'))
+// retire the probe area: a never-committed area left behind reads as stale once main moves
+await callTool('remove', { feature_id: 'noted' })
 
 // --- holder fallback when the branch lives elsewhere ----------------------------
 

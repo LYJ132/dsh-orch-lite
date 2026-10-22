@@ -4,6 +4,46 @@ All notable changes to this bundle. Rationale for each decision lives in `DEVLOG
 the short form. Dates are omitted on purpose — the project is developed in a single continuous line
 and `DEVLOG.md` carries the ordering.
 
+## 1.1.2 — the work-area contract holds
+
+A review of the upstream orch-lite 1.3.2 found defects in this bundle. Each was weighed against the
+project's own rule — *a mechanism only for accidents that are irreversible and severe; everything
+recoverable stays prompt discipline* — and only the survivors were fixed. Rationale: `DEVLOG.md`
+§ v1.1.2.
+
+- **A worker now starts inside its work area.** The dispatch protocol never passed the area as the
+  child's working directory, so a worker could run its whole task beside the primary tree — the one
+  accident the gate exists to prevent, surviving as a documentation hole. The protocol and the tool
+  result now pass `subagent({ cwd })`, and the executor handbook checks
+  `git rev-parse --show-toplevel` and the branch name before its first write.
+- **The lane test follows the repository root and folds `.`/`..`.** It compared against the session
+  cwd as strings: a session opened in a subdirectory left the real lanes unprotected, and
+  `./.worktrees/x` did not match the lane prefix.
+- **The package `worktree` field is validated, not just required.** It must be the repository's own
+  `.worktrees/<feature_id>`: `"."` (the primary tree), a sibling lane and a path outside the
+  repository are each refused, with the expected path in the reason.
+- **`git worktree remove` / `prune` aimed at a lane are denied shell** — the same commands
+  `orch_tool remove` gates behind a dirty check. The bare lane name matches too, so
+  `rm -rf .worktrees` is caught.
+- **A dispatch is validated when it carries a fenced-JSON package**, not when the prose mentions
+  `feature_id` — the remedy `DEVLOG.md` § v1.1.0 pre-recorded for its own watch item 3.
+- **The gate reads the live preset from the `agentPreset` Session projection**, falling back to the
+  creation header. The platform treats the header as a creation fact; a switch during the blank
+  window outlives it, and the gate used to go silently inert.
+- Bootstrap now **refuses to adopt a folder that holds user files** and says so through the tool
+  result; `orch_tool` **refuses unknown parameters**; `into` is validated as a branch name
+  (hierarchical names pass, traversal and a leading dash do not); `base` refuses a leading `-`;
+  `create` reports the primary tree's uncommitted paths, which are not in the fresh area; the
+  manuals dropped the invalid `backgroundMode`/`run_in_background` and "settles and is gone"
+  claims — the platform decides continuability by provider, and the explore lane's exemption is
+  that the gate never inspects it.
+- The stale finding says what is true ("nothing on it that main lacks") — a freshly allocated,
+  never-committed area reads the same as a merged one, and both are safe to retire.
+- Deliberately not fixed: the remaining shell spellings (`find .worktrees -delete` and kin), the
+  five routing states, automatic cleanup, and any registry — recoverable, low-probability, or not
+  yet happened.
+- Test suite: 146 checks.
+
 ## 1.1.1 — the work-area state became observable, and the agent label is free-form
 
 The isolation model has one blind spot: nothing could report the state of the work areas. The

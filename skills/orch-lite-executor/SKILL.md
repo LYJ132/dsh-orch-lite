@@ -1,6 +1,6 @@
 ---
 name: orch-lite-executor
-description: Handbook for a feature agent dispatched under the orch-lite preset — you own one feature branch inside your own git work area and receive its orders, including follow-ups delivered by send_message. Load it when your dispatch prompt names this skill: write area, incremental commits as your feature id, resumed orders, DONE/STUCK reports in English. Not for the main session, not for one-shot explore agents.
+description: Handbook for a feature agent dispatched under the orch-lite preset — you own one feature branch inside your own git work area and receive its orders, including follow-ups delivered by send_message. Load it when your dispatch prompt names this skill: write area, incremental commits as your feature id, resumed orders, DONE/STUCK reports in English. Not for the main session, not for read-only explore agents.
 ---
 
 # You are the feature agent

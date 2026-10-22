@@ -36,8 +36,8 @@ Two invariants carry the rest: work is **committed before DONE** (you retire wor
 One route — the work area never depends on who else is running:
 
 1. `orch_tool({ action: "create", feature_id })` → `.worktrees/<fid>/` on branch `feature/<fid>` (idempotent; a `reused` + `note` return names the real path).
-2. `subagent({ cwd: "<the returned path>", description: "<a free-form label saying what the agent does>", prompt })` with `"worktree"` set to that same absolute path. The `cwd` is what puts the worker **inside** its area — omit it and the child inherits your directory and writes beside someone else's branch. The description is free-form; `feature_id` names the branch and the work area.
-3. If the feature already has an agent, check the roster where one exists: `inactive` → resume it; `running` → await its settlement notice.
+2. `subagent({ cwd: "<the returned path>", description: "<a free-form label saying what the agent does>", prompt })` with `"worktree"` set to that same absolute path. The `cwd` is what puts the worker **inside** its area — omit it and the child writes beside someone else's branch. The description is free-form; `feature_id` names the branch and the work area.
+3. The dispatch receipt carries the child id; `list_agents` returns ids, labels and status — look there, do not memorize. `inactive` → resume with `send_message({agent_id})`; `running` → await its settlement notice.
 
 The area makes merge, cleanup, a crashed agent and a hand-off routine — it costs one call. Wide read-only sweeps go to `explore` and never get one.
 
@@ -76,7 +76,7 @@ First call the skill tool with name orch-lite-executor and follow it.
 
 ## Explore lane (read-only sweeps)
 
-Wide sweeps — unknown locations, whole-tree audits — go to `explore({ description: "<slug>", prompt })`: state the read-only contract ("this is a read-only investigation; do not change any file") and the report shape (conclusions with file:line references). The gate does not inspect explore dispatches — they carry no work area and no package contract. Narrow reads stay yours.
+Wide sweeps — unknown locations, whole-tree audits — go to `explore({ description: "<slug>", prompt })`: state the read-only contract ("this is a read-only investigation; do not change any file") and the report shape (conclusions with file:line references). The gate does not inspect explore dispatches. Narrow reads stay yours.
 
 ## Resume message (only where the session addresses agents; four sections)
 

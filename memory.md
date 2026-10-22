@@ -165,6 +165,37 @@
 **下一步计划**：
 - `npm test` 已跑：136/136 通过
 - 打包 1.1.1 安装验收（`npm pack` + `install_bundle` + 重启宿主 + 新会话，按 README 11 步清单）
-- 观察 doctor 的三类发现是否真的被用到，而不是变成噪音
+---
+
+### 2026-10-22 - v1.1.2：上游 1.3.2 评审的分诊与修复
+
+**当前分支**：main（本轮改动已提交，v1.1.2）
+
+**动机**：`REVIEW-orch-lite-1.3.2.md` 对照上游 1.3.2 提出 17 条缺陷（3 个 P0）。逐条用本包自己的判据复筛——*只为不可逆且严重的事故加机制,可恢复的、低概率的、平台已有的留给散文约定*——只有过筛的动了代码。实测复核结论：评审的技术断言基本全部复现成立,但对"我的意图"有两处误读（continuation 的分支条件被说成"写反",实际正确;5.1 理由改写方向对但漏了 label 的信息价值那一半）。
+
+**已完成（按不可逆性排序）**：
+1. **worker 从没进过自己的工作区**——派发协议从不传 `subagent({ cwd })`,平台默认让子代理继承父会话目录。这是最重的一条:所有隔离护栏的前提（"worker 在自己的地里干活"）一直是文档承诺而非事实。修三层:协议文本、工具结果（create 的派发提示直接给出带 cwd 的调用行）、执行手册（写第一笔前核 `git rev-parse --show-toplevel` + 分支名）。
+2. **lane 判定改用仓库根**（评审 BUG-2）:原实现拿会话 cwd 比字符串,cwd 在子目录时真 lane 完全不设防。纯函数化:repoRoot 由调用方解析传入（复用 `repositoryFor`,gate.js 保持无 IO）;新增 `normalizePath` 折叠 `.`/`..`（修 `./.worktrees/x` 与 `../.worktrees/x` 两个漏判）。
+3. **`worktree: "."` 击穿隔离**（评审 BUG-4）:原来只查字段存在。现在值必须等于 `<repoRoot>/.worktrees/<feature_id>`,`.`、别人车道、仓库外路径逐一拒绝,reason 带期望路径。repoRoot 经 `evaluateDispatch(prompt, description, repoRoot)` 传入,index.js 里已有异步解析。
+4. **`git worktree remove/prune` 从 shell 绕过脏检查**（评审 BUG-3 的严重部分）:与 `orch_tool remove` 同命令不同门。lane 词尾从必带斜杠改为负向前瞻,`rm -rf .worktrees`（整树裸名）同步入网。**评审列的其余拼法（`find -delete` 等）刻意不收**——长尾正则不值判据。
+5. **门禁触发从"提到 feature_id"收窄为"带 fenced-JSON 包"**（评审 BUG-5 的误伤侧）:这正是 DEVLOG § v1.1.0 watch item 3 预写的补救,原样执行。"漏"侧维持 opt-in 不为敌意模型加机制。
+6. **门禁读实时 preset**（评审 4.2）:`classifyAgent(header, presetId)` 第二参,调用方 `livePreset(session)` 优先读 `agentPreset` Session projection、缺服务时回退 header。平台源码白纸黑字:header 是 creation fact,blank-window 切换活过首回合。双向测试（切进来必须拦、切出去必须放）。**评审标注未实机验证——实机验收时列为回归点。**
+7. **bootstrap 拒收非空目录**（评审 S-2,preset-row 分支完成）:只 bootstrap 空目录或纯我们工件的目录;列目录失败按非空处理（宁可拒,不可误纳）;拒绝理由走 `note` 进工具结果。
+8. 杂项静默错误:`additionalProperties:false`（拼错参数从静默变报错;`define-tool.js` 的 property map 保留键写法）、`into` 独立 `assertBranchName`（放行 `release/1.0`、拒 `..` 与前导 `-`）、`base` 拒前导 `-`、create 报告主树未提交文件（评审 S-3:新工作区=HEAD,未提交文件不在其中）、`backgroundMode: one-shot` 整行删除（平台不存在该配置且 schemastery 静默保留——评审 BUG-1 属实;explore 道真实豁免是门禁不看它）、`assertSlug` 消息残留"agent description"清除、手册"settles and is gone / run_in_background"假承诺改写。
+9. stale 措辞从"already merged"改为"nothing on it that main lacks"——v1.1.1 那条"否则新工作区全误报"的注释**当时就写错了**:纯 git 状态下,刚建未提交的区和合并后的区图结构完全相同,都读作"可安全退休",这是事实不是 bug;测试里新建的探测区用完即 remove。
+
+**纪律记录**:版本走第三级（1.1.1→1.1.2,agent 自决）;tag v1.1.2 在 owner 验收前不落。漂移 pin（评审 2.3）扩了禁词表:`one-shot / verbatim identical / settles and is gone / BINDING_REASON / description == feature_id`,扫 lib+skills+presets。**未做（各有判据）**:五路由态合一（我们的 explore 道是真实平台车道,上游合三的原因是它没有）、`find -delete` 词法长尾、自动清理、child-id 注册表、`list_agents` 进执行手册以外的进一步指引（step 3 已加"查 id 用 list_agents,别背"）。
+
+**遇到的问题及解决方案**:
+- 两个并行子代理改同一批文件（gate-contract 与 preset-row 都动 SKILL.md/workspace.js/test）——违反了"文件不相交才并行"的拆解规则,合并冲突手工解了多轮。教训:共享 SKILL.md 的任务不能并行,应串行或合并为一个 feature。
+- gate-contract 子代理把提交落在了 **main**（绕过工作区隔离)——已把 `1a6a527` 移回 `feature/gate-contract`,main 用 merge 接入。这正是门禁想防的 bypass 在协调者身上的实例。
+- 子代理报告里的"139/139"实为 worktree 路径伪失败(`skills carry a directory resource base` 断言以目录名结尾,在任何 worktree 里必挂)——在基线提交上同跑同挂,确认非回归;主检出 146/146。
+- 一次 `read → edit` 之间被运行中的子代理插写,`old_string not found` 连击:改为先 `git checkout --theirs` 定住基底、再手工 port 的策略。
+
+**下一步计划**:
+- `node test/plugin.test.mjs .`:**146/146** 通过
+- 打包 1.1.2 安装验收（`npm pack` + `install_bundle` + 重启宿主 + 新会话,README 11 步;新增回归点:子代理真的开在自己工作区、cwd 在子目录时 lane 仍拦得住、blank-window 切 preset 后门禁生效）
+- 验收通过后补 tag `v1.1.2`
+- 观察:执行手册的前置两查会不会让只读型派发误报 STUCK
 
 ---
