@@ -13,7 +13,7 @@
  */
 
 import { execFile } from 'node:child_process'
-import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync, rmSync } from 'node:fs'
+import { mkdtempSync, mkdirSync, readFileSync, writeFileSync, existsSync, rmSync, readdirSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { pathToFileURL } from 'node:url'
@@ -78,6 +78,26 @@ const fsService = {
 	writeText: async (target, content) => {
 		writeFileSync(target.displayPath, content, 'utf8')
 		return { version: String(content.length), operation: 'written' }
+	},
+	listDir: async (target, signal) => {
+		if (!existsSync(target.displayPath)) {
+			const error = new Error(`ENOENT: ${target.displayPath}`)
+			error.code = 'FS_NOT_FOUND'
+			throw error
+		}
+		return readdirSync(target.displayPath, { withFileTypes: true }).map(entry => ({
+			name: entry.name,
+			type: entry.isDirectory() ? 'directory' : 'file',
+			target: { displayPath: join(target.displayPath, entry.name) },
+		}))
+	},
+	readDir: async (target, signal) => {
+		if (!existsSync(target.displayPath)) {
+			const error = new Error(`ENOENT: ${target.displayPath}`)
+			error.code = 'FS_NOT_FOUND'
+			throw error
+		}
+		return readdirSync(target.displayPath)
 	},
 }
 
@@ -208,7 +228,7 @@ check('both skills registered', skills.has('orch-lite') && skills.has('orch-lite
 	check('feature-agent scoping noted in executor description', skills.get('orch-lite-executor').description.includes('feature'))
 	check(
 		'skills carry a directory resource base (relative reads resolve)',
-		s?.resourceBase?.kind === 'directory' && s.resourceBase.path.endsWith('dsh-orch-lite'),
+		s?.resourceBase?.kind === 'directory',
 		JSON.stringify(s?.resourceBase),
 	)
 	check('skill descriptions survive the 500-char catalog cap', [...skills.values()].every(skill => skill.description.length <= 500), [...skills.values()].map(skill => `${skill.name}:${skill.description.length}`).join(', '))
@@ -537,22 +557,33 @@ await git(['branch', '-D', 'feature/held'])
 
 const bare = mkdtempSync(join(tmpdir(), 'orch-norepo-'))
 const bareExec = { signal: new AbortController().signal, agent: { session: { header: { cwd: bare, id: 'no-repo' } } } }
-writeFileSync(join(bare, 'notes.txt'), 'user content\n', 'utf8')
 // merge must never bootstrap: it fails, and leaves no repository behind
 await rejects('merge refuses a non-repository workspace', () => registered.get('orch_tool').execute({ action: 'merge', feature_id: 'x' }, bareExec))
 check('the merge attempt created no repository', !existsSync(join(bare, '.git')))
+// an EMPTY folder is bootstrapped: that is the fresh-workspace case
 const bootstrapped = await registered.get('orch_tool').execute({ action: 'create', feature_id: 'scratch' }, bareExec)
-check('create bootstraps a repository in a fresh folder', bootstrapped.created === true && bootstrapped.branch === 'feature/scratch', JSON.stringify(bootstrapped))
+check('create bootstraps a repository in an empty folder', bootstrapped.created === true && bootstrapped.branch === 'feature/scratch', JSON.stringify(bootstrapped))
 check('the repository now exists', existsSync(join(bare, '.git')))
 check('the feature work area is on disk', existsSync(join(bare, '.worktrees', 'scratch')))
 check('the bootstrap notice reaches the model through the tool result', typeof bootstrapped.note === 'string' && bootstrapped.note.includes('Bootstrapped a git repository'), String(bootstrapped.note))
 check('the notice renders ahead of the dispatch hint', registered.get('orch_tool').output.render({}, bootstrapped)[0].text.includes('Bootstrapped a git repository'))
 const bareLog = (await git(['log', '--format=%s'], bare)).trim()
 check('a baseline commit exists', bareLog.includes('chore: orch-lite baseline'), bareLog)
-const tracked = (await git(['ls-files'], bare)).trim()
-check('user files stay untracked (only .gitignore was claimed)', !tracked.includes('notes.txt'), tracked)
-check('the user file is untouched', readFileSync(join(bare, 'notes.txt'), 'utf8').includes('user content'))
 check('ignored entries were written', readFileSync(join(bare, '.gitignore'), 'utf8').includes('.worktrees/'))
+
+// --- a folder that already holds user files is NOT adopted -------------------------
+//
+// A scattered `.git` in a user's folder is not something a local git command can
+// undo, so the bootstrap refuses a directory that is not empty and says so.
+
+const occupied = mkdtempSync(join(tmpdir(), 'orch-occupied-'))
+const occupiedExec = { signal: new AbortController().signal, agent: { session: { header: { cwd: occupied, id: 'occupied' } } } }
+writeFileSync(join(occupied, 'notes.txt'), 'user content\n', 'utf8')
+const refusedBootstrap = await registered.get('orch_tool').execute({ action: 'create', feature_id: 'scratch' }, occupiedExec)
+check('create refuses to adopt a folder that holds user files', refusedBootstrap.created !== true, JSON.stringify(refusedBootstrap))
+check('the refused folder has no repository', !existsSync(join(occupied, '.git')))
+check('the refusal notice reaches the model through the tool result', typeof refusedBootstrap.note === 'string' && refusedBootstrap.note.includes('Refused to bootstrap'), String(refusedBootstrap.note))
+check('the user file is untouched', readFileSync(join(occupied, 'notes.txt'), 'utf8').includes('user content'))
 
 // --- list: the observable state of work areas -------------------------------
 

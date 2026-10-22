@@ -53,14 +53,15 @@ const OURS = [
 	'          # by the host row at the bottom of this patch. See DEVLOG.md.',
 	'          - id: orch',
 	"            name: 'dsh-orch-lite'",
-	'          # orch-lite lane: one-shot read-only sweeps (foreground by default;',
-	'          # run_in_background: true yields a job). See DEVLOG.md.',
+	'          # orch-lite lane: wide read-only sweeps delegated to an explore agent.',
+	'          # The platform decides continuability by provider (spawn defines',
+	'          # prepareContinuable); there is no backgroundMode config and no',
+	'          # run_in_background parameter. See DEVLOG.md.',
 	'          - id: tool-subagent-explore',
 	"            name: '@deepseek-ai/dsh-tool-subagent'",
 	'            config:',
 	'              provider: spawn',
 	'              toolName: explore',
-	'              backgroundMode: one-shot',
 	'          # --- end dsh-orch-lite -----------------------------------------',
 ]
 
@@ -87,7 +88,7 @@ const HEADER = [
 ]
 
 const DESCRIPTION =
-	'Coordinates background work — one continuable agent per feature branch, each owning a git work area; wide read-only sweeps run as one-shot explore agents. A gate keeps the main session out of worker lanes and off commands that leave the repository.'
+	'Coordinates background work — one continuable agent per feature branch, each owning a git work area; wide read-only sweeps delegate to explore agents (the platform decides continuability by provider; no backgroundMode config exists). A gate keeps the main session out of worker lanes and off commands that leave the repository.'
 
 const out = [
 	...HEADER,
