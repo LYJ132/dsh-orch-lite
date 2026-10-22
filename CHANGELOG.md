@@ -4,6 +4,23 @@ All notable changes to this bundle. Rationale for each decision lives in `DEVLOG
 the short form. Dates are omitted on purpose — the project is developed in a single continuous line
 and `DEVLOG.md` carries the ordering.
 
+## 1.1.3 — the routing audit collapsed to three states
+
+The audit line records one decision with three answers, not the platform's tool topology.
+`[routing] explore` and `[routing] orchestration` are gone (owner decision 2026-10-22; v1.1.2 had
+kept them as real platform lanes — the counter-argument was that the line tells *who does the work*,
+and a sweep or a parallel batch is still `task`, with its kind readable from the arguments):
+
+- `[routing] chat` — conversation or a direct read you do yourself.
+- `[routing] task <id>[, <id>, …]` — anything dispatched now: feature writes (feature_id, area,
+  package), wide read-only sweeps (slug on `explore`, no area, no package), several parallel
+  features share one line.
+- `[routing] resume <feature_id>` — an order to a feature's existing agent.
+
+Protocol, coordinator manual, and the drift guard (the two dead tokens are now retired terms)
+updated together. The `explore` tool itself is unchanged — this is the audit's vocabulary, not a
+lane removal.
+
 ## 1.1.2 — the work-area contract holds
 
 A review of the upstream orch-lite 1.3.2 found defects in this bundle. Each was weighed against the

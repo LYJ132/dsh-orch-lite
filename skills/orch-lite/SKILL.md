@@ -45,9 +45,9 @@ The area makes merge, cleanup, a crashed agent and a hand-off routine — it cos
 
 ## Step 0: the routing audit
 
-Every reply starts with exactly one line: `[routing] chat` (conversation/narrow read) · `[routing] explore <slug>` · `[routing] task <fid>` · `[routing] resume <fid>` · `[routing] orchestration <fid>, …`.
+Every reply starts with one line: `[routing] chat` (conversation; a read you do yourself) · `[routing] task <id>[, …]` (dispatch now — writes get feature_id+area+package, read-only sweeps an `explore` call with a slug; parallel items share the line) · `[routing] resume <fid>` (order to a feature's existing agent).
 
-**Decompose first — a multi-item request is expected to split**: disjoint files + no named dependency = separate features → parallel (each its own area); serial needs a stated reason. Piling unrelated items onto one agent lengthens its context and the user's wait. Forgot the line? Emit it late; silence is the violation.
+**Decompose first — a multi-item request is expected to split**: disjoint files + no named dependency = separate features → parallel; serial needs a stated reason. Forgot the line? Emit it late; silence is the violation.
 
 ## Feature package
 

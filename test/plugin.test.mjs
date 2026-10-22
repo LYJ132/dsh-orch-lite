@@ -251,7 +251,7 @@ check('both skills registered', skills.has('orch-lite') && skills.has('orch-lite
 		'skills/orch-lite-executor/SKILL.md',
 		'presets/orch-lite.patch.yml',
 	]
-	const retired = ['worktree_create', 'worktree_merge', 'worktree_remove', 'audit.log', 'BOOT_CONTRACT', 'EXECUTOR_DENIED_TOOLS', 'WORKTREE_REQUIRED_WHILE_BUSY', 'evaluateExplore', 'solo lane', 'never writes files', 'one-shot', 'verbatim identical', 'settles and is gone', 'BINDING_REASON', 'description == feature_id']
+	const retired = ['worktree_create', 'worktree_merge', 'worktree_remove', 'audit.log', 'BOOT_CONTRACT', 'EXECUTOR_DENIED_TOOLS', 'WORKTREE_REQUIRED_WHILE_BUSY', 'evaluateExplore', 'solo lane', 'never writes files', 'one-shot', 'verbatim identical', 'settles and is gone', 'BINDING_REASON', 'description == feature_id', '[routing] explore', '[routing] orchestration']
 	const stale = shipped.flatMap(relative => retired.filter(term => read(relative).includes(term)).map(term => `${relative}: ${term}`))
 	check('no shipped file still names a retired mechanism', stale.length === 0, stale.join(', '))
 	const importers = shipped.filter(relative => /from '\.\/audit\.js'|require\('.\/audit\.js'\)/.test(read(relative)))

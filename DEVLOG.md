@@ -29,6 +29,23 @@ number was raised without the owner deciding it. The release was re-cut as **v1.
 commit, and the v1.2.0 tag was withdrawn. The content did not change — only the number it shipped
 under, which is exactly the part that was not the agent's to choose.
 
+## v1.1.3 — the routing audit is the decision, not the topology
+
+§ v1.1.2 left "collapse the five routing states to three" unfixed on the grounds that our fifth
+state is a real platform lane (a distinct `explore` tool row upstream lacks). The owner rejected
+that reasoning: the `[routing]` line exists to record **who does the work** — answer yourself
+(chat), or dispatch (task), or re-wake a feature's agent (resume). Whether a dispatch is a write
+with a work area or a read-only sweep is visible in the line's own arguments, and a parallel batch
+is a task list, not a fourth decision. Encoding topology in the audit vocabulary made the model
+remember five tokens where three carry the decision; the collapse also deletes the step-0 rule's
+own disambiguation prose ("task vs orchestration"), which is vocabulary the model used to have to
+get right for no decision to change.
+
+What the state names never protected and still do not: the `explore` tool row, the gate's
+indifference to explore dispatches, and the package contract — all mechanism, none of it keyed on
+the audit line. The two dead tokens entered the drift guard's retired list so they cannot creep
+back through copied manuals.
+
 ## v1.1.2 — the review triage: which findings deserve a mechanism
 
 The upstream 1.3.2 review (REVIEW-orch-lite-1.3.2.md, 2026-10-22) reproduced 17 findings against
