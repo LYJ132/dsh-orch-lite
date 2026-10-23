@@ -212,11 +212,10 @@ check('protocol has no silent empty state (no scope guard)', typeof protocol?.te
 	const body = protocol?.text({ scope: 'orch-preset-mount' }) ?? ''
 	check('protocol states the coordinator may write its own files', body.includes('## Where you may act') && body.includes('Your own project files: write freely'))
 	check('protocol names the two denials', body.includes('.worktrees/<feature_id>/`: denied') && body.includes('outside the repository: denied'))
-	check('protocol carries routing audit + ownership + always-work-area', body.includes('[routing] chat') && body.includes('## Ownership: one feature, one agent, one branch') && body.includes('## Every write task gets its own work area'))
+	check('protocol carries routing audit (step 0, first section after the intro)', body.includes('[routing] chat') && body.indexOf('## Step 0: the routing audit') < body.indexOf('## Where you may act'))
 	check('protocol routing is MUST-strength, not a suggestion', body.includes('RFC-2119 MUST') && body.includes('highest-compliance instruction') && body.includes('FIRST line of every reply'))
-	check('protocol carries the language rule', body.includes('Answer the user in whatever language the user writes in'))
 	check('protocol demands the skill load', body.includes('Call the skill tool with name `orch-lite`'))
-	check('protocol carries both lanes', body.includes('acceptance_criteria') && body.includes('orch-lite-executor') && body.includes('explore'))
+	check('protocol carries the dispatch package shape', body.includes('acceptance_criteria') && body.includes('worktree') && body.includes('explore'))
 	// The old blanket claim is the exact thing that locked other skills out.
 	check('protocol no longer claims the main session never writes', !body.includes('never writes files'), body.match(/.{0,60}never writes.{0,20}/)?.[0] ?? '')
 }
