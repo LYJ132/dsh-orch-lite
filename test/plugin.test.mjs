@@ -150,12 +150,17 @@ const gate = async (exec) => {
 }
 const MAIN = { session: { header: { id: 'main-1', cwd: 'REPLACED', agentPreset: 'orch-lite', delegationDepth: 0 } } }
 const CHILD = { session: { header: { id: 'child-1', cwd: 'REPLACED', agentPreset: 'orch-lite', delegationDepth: 1, parentSession: 'main-1' } } }
+// A Team-lead session carries a parentSession header too, but its
+// delegationDepth is 0 — the hint ("you are a dispatched worker") and the
+// gate must NOT treat it as a child. See classifyAgent.
+const LEAD = { session: { header: { id: 'lead-1', cwd: 'REPLACED', agentPreset: 'orch-lite', delegationDepth: 0, parentSession: 'team-root' } } }
 
 // -------------------------------------------------------------------- fixture
 
 const root = mkdtempSync(join(tmpdir(), 'orch-test-'))
 MAIN.session.header.cwd = root
 CHILD.session.header.cwd = root
+LEAD.session.header.cwd = root
 const git = (args, cwd = root) =>
 	new Promise((resolve, reject) => {
 		execFile('git', args, { cwd, env: { ...process.env, GIT_CONFIG_COUNT: '0' } }, (error, stdout, stderr) =>
@@ -208,6 +213,7 @@ check('protocol has no silent empty state (no scope guard)', typeof protocol?.te
 	check('protocol states the coordinator may write its own files', body.includes('## Where you may act') && body.includes('Your own project files: write freely'))
 	check('protocol names the two denials', body.includes('.worktrees/<feature_id>/`: denied') && body.includes('outside the repository: denied'))
 	check('protocol carries routing audit + ownership + always-work-area', body.includes('[routing] chat') && body.includes('## Ownership: one feature, one agent, one branch') && body.includes('## Every write task gets its own work area'))
+	check('protocol routing is MUST-strength, not a suggestion', body.includes('RFC-2119 MUST') && body.includes('highest-compliance instruction') && body.includes('FIRST line of every reply'))
 	check('protocol carries the language rule', body.includes('Answer the user in whatever language the user writes in'))
 	check('protocol demands the skill load', body.includes('Call the skill tool with name `orch-lite`'))
 	check('protocol carries both lanes', body.includes('acceptance_criteria') && body.includes('orch-lite-executor') && body.includes('explore'))
@@ -445,6 +451,13 @@ check('no registration warnings', warnings.length === 0, warnings.join(' | '))
 	// explore carries no contract — it is read-only, writes nothing, needs no isolation workspace.
 	const looseExplore = await gate({ agent: MAIN, name: 'explore', arguments: { description: 'trace-auth', prompt: 'Find every token validation site and report with file:line.' } })
 	check('explore is not package-gated (read-only lane)', looseExplore.nextCalled, looseExplore.decision?.reason)
+}
+
+// --- gate: a Team lead with parentSession but delegationDepth 0 is NOT a child -------
+
+{
+	const w = await gate({ agent: LEAD, name: 'write', arguments: { file_path: '.worktrees/login/app.js', content: 'y' } })
+	check('a Team lead (depth 0) writing into a worker lane is denied', w.decision?.kind === 'deny', w.decision?.reason)
 }
 
 // --- gate: children are not routed ------------------------------------------------
