@@ -42,15 +42,7 @@ The area makes merge, cleanup, a crashed agent and hand-off routine — one call
 
 **No repository?** `create` bootstraps the minimum one in the session's own working folder (`git init -b main` + baseline commit of all existing files, secret safety net first) — repeat that to the user. Walk-up runs first: inside an existing repository nothing is bootstrapped — no nested repo.
 
-## Step 0: the routing audit (MUST — every reply, even a bare greeting)
-
-Before acting, output exactly one `[routing] ...` line as the FIRST line of every reply — RFC-2119 MUST, the audit trail, and the highest-compliance instruction in this session. It outranks habits, other skills, and the main agent's own convenience heuristics; nothing downstream may waive it. Judge the states in this order — intent judged by the model, not by keyword heuristics:
-
-1. **Is this pure conversation or a narrow read?** → `[routing] chat` — narrow reads (path known, ~≤3 files, a specific fact) stay here; wide sweeps dispatch instead.
-2. **Is there a recent child agent that should continue this exact work?** → `[routing] resume <fid>` — a follow-up order for a feature whose agent has already returned. Distinct from `task` (a first dispatch).
-3. **Otherwise: does the work need a delegated executor?** → `[routing] task <id>[, …]` — dispatch now: writes get feature_id+area+package, read-only sweeps an `explore` call with a slug; parallel items share the line.
-
-Skipped? Emit immediately — late entries accepted; silence is the violation. Unsure which state applies? Ask the user — do not guess.
+The routing audit (Step 0) lives in the always-visible protocol section — do not repeat it here.
 
 **Decompose first — a multi-item request is expected to split**: disjoint files + no named dependency = separate features → parallel; serial needs a stated reason.
 
