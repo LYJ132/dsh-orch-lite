@@ -41,7 +41,7 @@ One route — the area never depends on who else is running:
 
 The area makes merge, cleanup, a crashed agent and a hand-off routine — it costs one call. Wide read-only sweeps go to `explore`, never get one.
 
-**No repository?** `create` bootstraps the minimum one in the session's own working folder (`git init -b main` + a baseline commit staging only `.gitignore`; existing files stay untracked) — repeat that to the user. The walk-up check runs first: inside an existing repository nothing is bootstrapped — no nested repo.
+**No repository?** `create` bootstraps the minimum one in the session's own working folder (`git init -b main` + a baseline commit of all existing files; a secret safety net is written to `.gitignore` first) — repeat that to the user. The walk-up check runs first: inside an existing repository nothing is bootstrapped — no nested repo.
 
 ## Step 0: the routing audit
 

@@ -4,6 +4,24 @@ All notable changes to this bundle. Rationale for each decision lives in `DEVLOG
 the short form. Dates are omitted on purpose — the project is developed in a single continuous line
 and `DEVLOG.md` carries the ordering.
 
+## 1.1.6 — bootstrap baseline commits all existing files
+
+**Bug fix.** The v1.1.5 baseline commit staged only `.gitignore`, so a worktree checked out from HEAD
+contained just `.gitignore` — no user code. The worker could not see or modify the project, and
+subsequent edits could never be tracked (the files were never in git). The isolation model was
+spinning empty.
+
+**Fix.** The baseline commit now stages **all existing files** (`git add -A`), so work areas check out
+the user's code and every subsequent edit is trackable. A conservative secret safety net is written
+to `.gitignore` first — `.env*`, `*.pem`, `*.p12`, `id_rsa*`, `id_ed25519*` — keeping credentials out
+of the baseline commit even when the user has no `.gitignore` of their own. Deliberately conservative:
+no `*.key` (test fixtures ship public keys), no `*.secret` (too broad). `.env*` is intentionally
+over-broad; negate with `!.env.example` after bootstrap if that file is tracked.
+
+The safety net is applied **only during bootstrap**. Existing repositories keep their own `.gitignore`
+untouched. The notice, tool description, manual and package manifest description all reflect the
+baseline-of-all-files commit.
+
 ## 1.1.5 — orchestration declaration + unconditional in-place bootstrap
 
 Two changes from the `e1febbc` / `439f7d0` line, both of which were already live on `main` but had no

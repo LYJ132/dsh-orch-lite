@@ -609,18 +609,23 @@ check('ignored entries were written', readFileSync(join(bare, '.gitignore'), 'ut
 //
 // Owner rule (2026-10-23): the repository lives in the session's own working
 // folder. The walk-up check is the only nesting defense; a non-repository
-// folder gets the minimum bootstrap unconditionally — existing files stay
-// untracked because only `.gitignore` is staged.
+// folder gets the minimum bootstrap unconditionally — and since v1.1.5 the
+// baseline commit stages ALL existing files (`git add -A`), so the user's
+// code is trackable from the first commit and work areas check it out. A
+// secret safety net (.env*, *.pem, *.p12, id_rsa*, id_ed25519*) is written
+// to .gitignore first.
 
 const occupied = mkdtempSync(join(tmpdir(), 'orch-occupied-'))
 const occupiedExec = { signal: new AbortController().signal, agent: { session: { header: { cwd: occupied, id: 'occupied' } } } }
 writeFileSync(join(occupied, 'notes.txt'), 'user content\n', 'utf8')
+writeFileSync(join(occupied, '.env'), 'SECRET=do-not-commit\n', 'utf8')
 const adoptedBootstrap = await registered.get('orch_tool').execute({ action: 'create', feature_id: 'scratch' }, occupiedExec)
 check('create bootstraps a folder that holds user files, in place', adoptedBootstrap.created === true && adoptedBootstrap.branch === 'feature/scratch', JSON.stringify(adoptedBootstrap))
 check('the repository now exists beside the user files', existsSync(join(occupied, '.git')))
 check('the bootstrap notice reaches the model through the tool result', typeof adoptedBootstrap.note === 'string' && adoptedBootstrap.note.includes('Bootstrapped a git repository'), String(adoptedBootstrap.note))
 const trackedFiles = (await git(['ls-files'], occupied)).split(/\r?\n/).filter(Boolean)
-check('the user file stays untracked', readFileSync(join(occupied, 'notes.txt'), 'utf8').includes('user content') && !trackedFiles.includes('notes.txt'), JSON.stringify(trackedFiles))
+check('the user file is now tracked in the baseline commit', readFileSync(join(occupied, 'notes.txt'), 'utf8').includes('user content') && trackedFiles.includes('notes.txt'), JSON.stringify(trackedFiles))
+check('the secret safety net keeps .env out of the baseline', !trackedFiles.includes('.env'), JSON.stringify(trackedFiles))
 
 // --- list: the observable state of work areas -------------------------------
 
