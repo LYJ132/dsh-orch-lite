@@ -605,19 +605,22 @@ const bareLog = (await git(['log', '--format=%s'], bare)).trim()
 check('a baseline commit exists', bareLog.includes('chore: orch-lite baseline'), bareLog)
 check('ignored entries were written', readFileSync(join(bare, '.gitignore'), 'utf8').includes('.worktrees/'))
 
-// --- a folder that already holds user files is NOT adopted -------------------------
+// --- a folder that already holds user files IS bootstrapped in place ---------------
 //
-// A scattered `.git` in a user's folder is not something a local git command can
-// undo, so the bootstrap refuses a directory that is not empty and says so.
+// Owner rule (2026-10-23): the repository lives in the session's own working
+// folder. The walk-up check is the only nesting defense; a non-repository
+// folder gets the minimum bootstrap unconditionally — existing files stay
+// untracked because only `.gitignore` is staged.
 
 const occupied = mkdtempSync(join(tmpdir(), 'orch-occupied-'))
 const occupiedExec = { signal: new AbortController().signal, agent: { session: { header: { cwd: occupied, id: 'occupied' } } } }
 writeFileSync(join(occupied, 'notes.txt'), 'user content\n', 'utf8')
-const refusedBootstrap = await registered.get('orch_tool').execute({ action: 'create', feature_id: 'scratch' }, occupiedExec)
-check('create refuses to adopt a folder that holds user files', refusedBootstrap.created !== true, JSON.stringify(refusedBootstrap))
-check('the refused folder has no repository', !existsSync(join(occupied, '.git')))
-check('the refusal notice reaches the model through the tool result', typeof refusedBootstrap.note === 'string' && refusedBootstrap.note.includes('Refused to bootstrap'), String(refusedBootstrap.note))
-check('the user file is untouched', readFileSync(join(occupied, 'notes.txt'), 'utf8').includes('user content'))
+const adoptedBootstrap = await registered.get('orch_tool').execute({ action: 'create', feature_id: 'scratch' }, occupiedExec)
+check('create bootstraps a folder that holds user files, in place', adoptedBootstrap.created === true && adoptedBootstrap.branch === 'feature/scratch', JSON.stringify(adoptedBootstrap))
+check('the repository now exists beside the user files', existsSync(join(occupied, '.git')))
+check('the bootstrap notice reaches the model through the tool result', typeof adoptedBootstrap.note === 'string' && adoptedBootstrap.note.includes('Bootstrapped a git repository'), String(adoptedBootstrap.note))
+const trackedFiles = (await git(['ls-files'], occupied)).split(/\r?\n/).filter(Boolean)
+check('the user file stays untracked', readFileSync(join(occupied, 'notes.txt'), 'utf8').includes('user content') && !trackedFiles.includes('notes.txt'), JSON.stringify(trackedFiles))
 
 // --- list: the observable state of work areas -------------------------------
 

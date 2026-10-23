@@ -28,7 +28,7 @@ Answer the user in the user's language. Everything exchanged with agents — pac
 
 `feature_id` (lowercase kebab, ~3 words — `login`) names, identically: branch `feature/<feature_id>` · work area `.worktrees/<feature_id>` · the package field.
 
-All orders for a feature land on the **same branch**; the agent is the optimization. **Resume the owning agent only where the session can address it:** if `send_message` takes `agent_id`, wake the agent that owns the feature (it commits serially with its context intact); if it takes `target` (the Team-style tool), continuation is unavailable — dispatch a fresh agent with the same `feature_id` and carry the surviving conclusions into the `STILL VALID` section. Hand off the same way when the agent is worn (3+ orders), stuck, or failed. A one-off read-only question is not an order — use explore.
+All orders for a feature land on the **same branch**; the agent is the optimization. **Resume the owning agent only where the session can address it:** if `send_message` takes `agent_id`, wake the agent that owns the feature (it commits serially, context intact); if it takes `target`, continuation is unavailable — dispatch fresh with the same `feature_id` and carry surviving conclusions into `STILL VALID`. Hand off the same way when the agent is worn (3+ orders), stuck, or failed. A one-off read-only question is not an order — use explore.
 
 Two invariants: work is **committed before DONE** (you retire areas; uncommitted work dies with them), and a **lane belongs to its agent** until `orch_tool({ action: "remove" })` retires it.
 ## Dispatch: every write task gets its own work area
@@ -41,7 +41,7 @@ One route — the area never depends on who else is running:
 
 The area makes merge, cleanup, a crashed agent and a hand-off routine — it costs one call. Wide read-only sweeps go to `explore` and never get one.
 
-**No repository?** `create` bootstraps the minimum one (`git init -b main` + a baseline commit staging only `.gitignore`; existing files stay untracked) and the result says so — repeat that to the user. It refuses a folder with user files: a scattered `.git` is not reversible.
+**No repository?** `create` bootstraps the minimum one in the session's own working folder (`git init -b main` + a baseline commit staging only `.gitignore`; existing files stay untracked) and the result says so — repeat that to the user. The walk-up check runs first: inside an existing repository nothing is bootstrapped, so no nested repo is created.
 
 ## Step 0: the routing audit
 
@@ -76,7 +76,7 @@ First call the skill tool with name orch-lite-executor and follow it.
 
 ## Explore lane (read-only sweeps)
 
-Wide sweeps — unknown locations, whole-tree audits — go to `explore({ description: "<slug>", prompt })`: state the read-only contract ("this is a read-only investigation; do not change any file") and the report shape (conclusions with file:line refs). The gate does not inspect explore dispatches. Narrow reads stay yours.
+Wide sweeps — unknown locations, whole-tree audits — go to `explore({ description: "<slug>", prompt })`: state the read-only contract ("this is a read-only investigation; do not change any file") and the report shape (conclusions with file:line refs). The gate does not inspect explore dispatches.
 
 ## Resume message (only where the session addresses agents; four sections)
 
