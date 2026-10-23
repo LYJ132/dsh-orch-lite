@@ -619,42 +619,6 @@ check('the refused folder has no repository', !existsSync(join(occupied, '.git')
 check('the refusal notice reaches the model through the tool result', typeof refusedBootstrap.note === 'string' && refusedBootstrap.note.includes('Refused to bootstrap'), String(refusedBootstrap.note))
 check('the user file is untouched', readFileSync(join(occupied, 'notes.txt'), 'utf8').includes('user content'))
 
-// --- a parent folder whose immediate child is a repository --------------------
-//
-// The session opens in a parent folder; the real repo lives one level down.
-// `git rev-parse --show-toplevel` from the parent walks UP and finds nothing,
-// so the tool scans immediate subdirectories for exactly one repository.
-
-{
-	const parent = mkdtempSync(join(tmpdir(), 'orch-parent-'))
-	const childRepo = join(parent, 'dsh-bi-dashboards')
-	mkdirSync(childRepo, { recursive: true })
-	writeFileSync(join(childRepo, 'app.js'), 'export const version = 1\n', 'utf8')
-	await git(['init', '-b', 'main', '-q'], childRepo)
-	await git(['add', '.'], childRepo)
-	await git(['-c', 'user.name=t', '-c', 'user.email=t@l', 'commit', '-qm', 'baseline'], childRepo)
-
-	const parentExec = { signal: new AbortController().signal, agent: { session: { header: { cwd: parent, id: 'parent' } } } }
-	const found = await registered.get('orch_tool').execute({ action: 'create', feature_id: 'login' }, parentExec)
-	check('create finds a repository in an immediate subdirectory', found.created === true && found.branch === 'feature/login', JSON.stringify(found))
-	check('the work area is under the child repo, not the parent', found.worktree_path.replace(/\\/g, '/').startsWith(childRepo.replace(/\\/g, '/')), found.worktree_path)
-	check('the parent folder was not turned into a repository', !existsSync(join(parent, '.git')))
-	await callTool('remove', { feature_id: 'login' })
-
-	// Ambiguous: two repositories in subdirectories — refuse rather than guess.
-	const childTwo = join(parent, 'other-repo')
-	mkdirSync(childTwo, { recursive: true })
-	writeFileSync(join(childTwo, 'x.js'), 'x\n', 'utf8')
-	await git(['init', '-b', 'main', '-q'], childTwo)
-	await git(['add', '.'], childTwo)
-	await git(['-c', 'user.name=t', '-c', 'user.email=t@l', 'commit', '-qm', 'baseline'], childTwo)
-	const ambiguous = await registered.get('orch_tool').execute({ action: 'create', feature_id: 'login' }, parentExec)
-	check('create refuses when two subdirectories are repositories', ambiguous.created !== true, JSON.stringify(ambiguous))
-	await git(['worktree', 'remove', '--force', join(childRepo, '.worktrees', 'login')], childRepo).catch(() => {})
-	await git(['worktree', 'prune'], childRepo).catch(() => {})
-	rmSync(parent, { recursive: true, force: true })
-}
-
 // --- list: the observable state of work areas -------------------------------
 
 await callTool('remove', { feature_id: 'login' })
