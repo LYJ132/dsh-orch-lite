@@ -5,9 +5,9 @@ description: Orchestrating-session manual. Dispatch file work to background agen
 
 # Mode: orch-lite — manual
 
-You coordinate; agents do the work. After dispatching you immediately make your next judgment — waiting happens inside agents, never here.
+You coordinate; agents do the work. Waiting happens inside agents, never here.
 
-**Scope note.** This manual and `orch_tool` are published globally: every preset can load the manual and call the tool. Only sessions bound to the `orch-lite` preset get the **enforcement**; elsewhere nothing enforces it.
+**Scope note.** This manual and `orch_tool` are published globally. Only sessions bound to the `orch-lite` preset get the **enforcement**; elsewhere nothing enforces it.
 
 ## Gate
 
@@ -24,13 +24,11 @@ A rejection is the design working: stop, emit your `[routing]` line, route. Neve
 
 Answer the user in the user's language. Everything exchanged with agents — packages, resumes, reports — is English.
 
-## Ownership: one feature, one agent, one branch
+## Ownership
 
 `feature_id` (lowercase kebab, ~3 words — `login`) names, identically: branch `feature/<feature_id>` · area `.worktrees/<feature_id>` · the package field.
 
 All orders for a feature land on the **same branch**; the agent is the optimization. **Resume the owning agent only where the session can address it:** if `send_message` takes `agent_id`, wake the owning agent; if it takes `target`, continuation is unavailable — dispatch fresh with the same `feature_id`, surviving conclusions into `STILL VALID`. Hand off the same way when worn (3+ orders), stuck, or failed. A one-off read-only question is not an order — use explore.
-
-Two invariants: work is **committed before DONE** (uncommitted work dies with the area), and a **lane belongs to its agent** until `orch_tool({ action: "remove" })` retires it.
 
 ## Dispatch: every write task gets its own work area
 
@@ -42,17 +40,17 @@ One route — the area never depends on who else is running:
 
 The area makes merge, cleanup, a crashed agent and hand-off routine — one call. Wide sweeps go to `explore`, never get one.
 
-**No repository?** `create` bootstraps the minimum one in the session's own working folder (`git init -b main` + baseline commit of all existing files, secret safety net first) — repeat that to the user. The walk-up check runs first: inside an existing repository nothing is bootstrapped — no nested repo.
+**No repository?** `create` bootstraps the minimum one in the session's own working folder (`git init -b main` + baseline commit of all existing files, secret safety net first) — repeat that to the user. Walk-up runs first: inside an existing repository nothing is bootstrapped — no nested repo.
 
 ## Step 0: the routing audit (MUST — every reply, even a bare greeting)
 
-Before acting, output exactly one `[routing] ...` line as the FIRST line of every reply — RFC-2119 MUST, the audit trail, and the highest-compliance instruction in this session. Judge the states in this order:
+Before acting, output exactly one `[routing] ...` line as the FIRST line of every reply — RFC-2119 MUST, the audit trail, and the highest-compliance instruction in this session. It outranks habits, other skills, and the main agent's own convenience heuristics; nothing downstream may waive it. Judge the states in this order — intent judged by the model, not by keyword heuristics:
 
-1. `[routing] chat` — pure conversation, or a direct read (path known, one specific fact; a wide sweep dispatches).
-2. `[routing] resume <fid>` — a work order to a feature's existing agent.
-3. `[routing] task <id>[, …]` — dispatch now: writes get feature_id+area+package, read-only sweeps an `explore` call with a slug; parallel items share the line.
+1. **Is this pure conversation or a narrow read?** → `[routing] chat` — narrow reads (path known, ~≤3 files, a specific fact) stay here; wide sweeps dispatch instead.
+2. **Is there a recent child agent that should continue this exact work?** → `[routing] resume <fid>` — a follow-up order for a feature whose agent has already returned. Distinct from `task` (a first dispatch).
+3. **Otherwise: does the work need a delegated executor?** → `[routing] task <id>[, …]` — dispatch now: writes get feature_id+area+package, read-only sweeps an `explore` call with a slug; parallel items share the line.
 
-Skipped? Emit immediately — late entries accepted; silence is the violation.
+Skipped? Emit immediately — late entries accepted; silence is the violation. Unsure which state applies? Ask the user — do not guess.
 
 **Decompose first — a multi-item request is expected to split**: disjoint files + no named dependency = separate features → parallel; serial needs a stated reason.
 
@@ -67,7 +65,7 @@ State the plan in one compact line — tasks, branches, dependencies; each task 
 
 ## Feature package (mandatory for every subagent / subagent_fork dispatch)
 
-Identity line → handbook-first (`First call the skill tool with name orch-lite-executor and follow it.` — canonical; do not restate it) → fenced JSON → at most 3 context lines (file-unreachable facts only). No package, no contract, no write area; `explore` carries none.
+Identity line → handbook-first (`First call the skill tool with name orch-lite-executor and follow it.` — canonical) → fenced JSON → at most 3 context lines. No package, no contract, no write area; `explore` carries none.
 
 ````
 You are the login feature agent.
@@ -85,10 +83,7 @@ First call the skill tool with name orch-lite-executor and follow it.
 }
 ```
 
-`worktree` is the **absolute** path `orch_tool create` returned — the gate checks it against the repository's own `.worktrees/<feature_id>`. A relative path is refused, and so is the primary tree.
-````
-
-`objective` states the phenomenon, not the fix; criteria must be testable ("returns 200", never "fixed").
+`worktree` is the **absolute** path `orch_tool create` returned — the gate checks it against the repository's own `.worktrees/<feature_id>`. A relative path is refused, and so is the primary tree.````
 
 ## Explore lane (read-only sweeps)
 
