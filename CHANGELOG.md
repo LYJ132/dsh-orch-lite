@@ -4,6 +4,33 @@ All notable changes to this bundle. Rationale for each decision lives in `DEVLOG
 the short form. Dates are omitted on purpose — the project is developed in a single continuous line
 and `DEVLOG.md` carries the ordering.
 
+## 1.1.5 — orchestration declaration + unconditional in-place bootstrap
+
+Two changes from the `e1febbc` / `439f7d0` line, both of which were already live on `main` but had no
+version, no CHANGELOG entry, and a stale `package.json` description.
+
+**Orchestration declaration.** Right after a `task` routing line the coordinator states the plan in one
+compact line — tasks, branches, dependencies; each task carries its branch. Syntax:
+
+- `任务 @feature/login` — single · `[任务 @feature/a, 任务 @feature/b]` — parallel
+- `任务 @feature/a → 任务 @feature/b` — B waits for A
+- `[任务 @feature/a, 任务 @feature/b] → 任务 @feature/c` — C waits for both
+- `[任务 @feature/a → 任务 @feature/c, 任务 @feature/b → 任务 @feature/d]` — two dependency paths in parallel
+
+A `task` line without a following declaration is an incomplete plan. Parallelism is the default across
+independent features; only a shared file or a true output dependency serializes. Added to the
+coordinator manual (new "Orchestration declaration" section) and to the always-visible protocol
+section, so the declaration is required even before the skill is loaded. The manual was re-balanced
+within its compaction budget to absorb the new section.
+
+**Unconditional in-place bootstrap.** `create` now bootstraps the minimum repository in the session's
+own working folder whenever the walk-up finds nothing — `git init -b main` plus a baseline commit
+staging only `.gitignore`, leaving all existing files untracked. The old non-empty-folder guard is
+gone (owner decision 2026-10-23: the repository belongs in the session's working folder; the walk-up
+check exists only to prevent nesting, never to scan child directories). `merge` / `remove` / `list` /
+`doctor` never bootstrap. The `package.json` description and the manual now describe the unconditional
+behaviour instead of the removed guard.
+
 ## 1.1.4 — the dispatch contract is mandatory, not opt-in
 
 In a session bound to the `orch-lite` preset every `subagent` / `subagent_fork` dispatch must carry a
