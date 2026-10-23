@@ -4,6 +4,20 @@ All notable changes to this bundle. Rationale for each decision lives in `DEVLOG
 the short form. Dates are omitted on purpose — the project is developed in a single continuous line
 and `DEVLOG.md` carries the ordering.
 
+## 1.1.4 — the dispatch contract is mandatory, not opt-in
+
+In a session bound to the `orch-lite` preset every `subagent` / `subagent_fork` dispatch must carry a
+fenced-JSON package (`feature_id` / `objective` / `acceptance_criteria` / `worktree` + handbook pointer).
+The dispatch tool IS the role, so there is no opt-in signal: a dispatch without a package means the
+child has no contract and no write area. `explore` carries no package — it is read-only, writes
+nothing, and needs no isolation workspace.
+
+The old trigger ("a fence mentioning `feature_id`/`objective`, or the handbook pointer") and the
+`hasPackageClaim` helper are gone. `evaluateDispatch` now validates on tool name alone, and the three
+pass-through cases — prose that merely mentions `feature_id`, another skill's own dispatch convention,
+and a handbook pointer without a package — are now refused with the same reason as a missing package.
+The protocol section, both manuals, and the test suite were updated together.
+
 ## 1.1.3 — the routing audit collapsed to three states
 
 The audit line records one decision with three answers, not the platform's tool topology.

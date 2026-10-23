@@ -1,6 +1,6 @@
 /**
  * Standalone exercise of the orch-lite host plugin (v1.1): the work-area tool,
- * the slim gate (worker lane + external effects + opt-in package), skill
+ * the slim gate (worker lane + external effects + mandatory package), skill
  * registration, and the worker hint.
  *
  * The package cannot be installed from this session (the desktop profile is
@@ -251,7 +251,7 @@ check('both skills registered', skills.has('orch-lite') && skills.has('orch-lite
 		'skills/orch-lite-executor/SKILL.md',
 		'presets/orch-lite.patch.yml',
 	]
-	const retired = ['worktree_create', 'worktree_merge', 'worktree_remove', 'audit.log', 'BOOT_CONTRACT', 'EXECUTOR_DENIED_TOOLS', 'WORKTREE_REQUIRED_WHILE_BUSY', 'evaluateExplore', 'solo lane', 'never writes files', 'one-shot', 'verbatim identical', 'settles and is gone', 'BINDING_REASON', 'description == feature_id', '[routing] explore', '[routing] orchestration']
+	const retired = ['worktree_create', 'worktree_merge', 'worktree_remove', 'audit.log', 'BOOT_CONTRACT', 'EXECUTOR_DENIED_TOOLS', 'WORKTREE_REQUIRED_WHILE_BUSY', 'evaluateExplore', 'solo lane', 'never writes files', 'one-shot', 'verbatim identical', 'settles and is gone', 'BINDING_REASON', 'description == feature_id', '[routing] explore', '[routing] orchestration', 'opt-in contract']
 	const stale = shipped.flatMap(relative => retired.filter(term => read(relative).includes(term)).map(term => `${relative}: ${term}`))
 	check('no shipped file still names a retired mechanism', stale.length === 0, stale.join(', '))
 	const importers = shipped.filter(relative => /from '\.\/audit\.js'|require\('.\/audit\.js'\)/.test(read(relative)))
@@ -435,16 +435,16 @@ check('no registration warnings', warnings.length === 0, warnings.join(' | '))
 	const badId = await gate({ agent: MAIN, name: 'subagent', arguments: { description: 'Login', prompt: featurePrompt({ feature_id: 'Login', objective: 'o', acceptance_criteria: ['c'], worktree: join(root, '.worktrees', 'login') }) } })
 	check('a non-kebab feature_id is refused', badId.decision?.kind === 'deny')
 	const prose = await gate({ agent: MAIN, name: 'subagent', arguments: { description: 'summarize notes', prompt: 'Read memory/session.md and append today’s decisions. No structured package here.' } })
-	check('a dispatch that is not a feature package passes (opt-in contract)', prose.nextCalled, prose.decision?.reason)
+	check('a dispatch with no package is refused (mandatory contract)', prose.decision?.kind === 'deny' && prose.decision.reason.includes('package'), prose.decision?.reason)
 	const otherSkill = await gate({ agent: MAIN, name: 'subagent_fork', arguments: { description: 'remember', prompt: 'Load the memory skill and store this preference in the memory file.' } })
-	check("another skill's own dispatch convention passes", otherSkill.nextCalled, otherSkill.decision?.reason)
+	check("another skill's own dispatch convention is refused (mandatory contract)", otherSkill.decision?.kind === 'deny', otherSkill.decision?.reason)
 	const bareMention = await gate({ agent: MAIN, name: 'subagent', arguments: { description: 'login', prompt: 'feature_id: login — but no fenced package and no handbook pointer' } })
-	check('prose that merely mentions feature_id passes unvalidated (narrowed trigger)', bareMention.nextCalled, bareMention.decision?.reason)
+	check('prose that merely mentions feature_id is refused', bareMention.decision?.kind === 'deny', bareMention.decision?.reason)
 	const handbookNoPkg = await gate({ agent: MAIN, name: 'subagent', arguments: { description: 'login', prompt: 'First call the skill tool with name orch-lite-executor and follow it.\nWrite the fix. No fenced package at all.' } })
 	check('claiming the handbook without a package is told why', handbookNoPkg.decision?.kind === 'deny' && handbookNoPkg.decision.reason.includes('package'), handbookNoPkg.decision?.reason)
-	// M9 removed: explore carries no contract the gate could police.
+	// explore carries no contract — it is read-only, writes nothing, needs no isolation workspace.
 	const looseExplore = await gate({ agent: MAIN, name: 'explore', arguments: { description: 'trace-auth', prompt: 'Find every token validation site and report with file:line.' } })
-	check('explore is no longer package-gated', looseExplore.nextCalled, looseExplore.decision?.reason)
+	check('explore is not package-gated (read-only lane)', looseExplore.nextCalled, looseExplore.decision?.reason)
 }
 
 // --- gate: children are not routed ------------------------------------------------
