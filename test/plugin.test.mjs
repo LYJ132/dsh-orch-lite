@@ -222,6 +222,13 @@ const rejects = async (name, fn) => {
 
 check('the one work-area tool is registered by the host half', [...registered.keys()].join(',') === 'orch_tool', [...registered.keys()].join(', '))
 check('the tool takes the five actions', ['create', 'merge', 'remove', 'list', 'doctor'].every(a => registered.get('orch_tool').parameters.properties.action.enum.includes(a)))
+check(
+	'the tool schema takes the optional depends_on list of feature ids',
+	registered.get('orch_tool').parameters.properties.depends_on?.type === 'array' &&
+		registered.get('orch_tool').parameters.properties.depends_on.items?.type === 'string' &&
+		!registered.get('orch_tool').parameters.required.includes('depends_on'),
+	JSON.stringify(registered.get('orch_tool').parameters.properties.depends_on),
+)
 const protocol = sections.find(s => s.name === 'orch-lite:protocol')
 check('protocol section at order 2850, interpolate false', protocol?.order === 2850 && protocol?.interpolate === false)
 check('protocol has no silent empty state (no scope guard)', typeof protocol?.text === 'function' && protocol.text({ scope: 'any-scope' }).startsWith('# Mode: orch-lite'))
