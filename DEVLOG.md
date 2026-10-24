@@ -4,7 +4,7 @@ Decision history and rationale for this plugin. Plugin code, skills, prompts,
 and tool messages carry only current rules and runtime facts; the "why we did
 it this way" lives here.
 
-## Unreleased — `depends_on`: the declaration's arrow becomes a branch cut
+## v1.1.11 — `depends_on`: the declaration's arrow becomes a branch cut
 
 The orchestration declaration could say `A → B`, and nothing tied that edge to the
 branch cut. `create` always cut from the current `HEAD`, so when B's acceptance
@@ -128,7 +128,7 @@ number was raised without the owner deciding it. The release was re-cut as **v1.
 commit, and the v1.2.0 tag was withdrawn. The content did not change — only the number it shipped
 under, which is exactly the part that was not the agent's to choose.
 
-## v1.1.10 — a client half for the two silent profile conflicts
+## v1.1.11 — a client half for the two silent profile conflicts
 
 **The problem the Node half cannot see.** When the desktop profile also mounts
 `@deepseek-ai/dsh-experimental-agent-team-profile` and
@@ -179,7 +179,8 @@ field is `application`, not `status`; `overridden` means a higher-priority profi
 and `restart-required` carries `restartReason`.
 
 **Why a patch bump.** The change is new capability, which normally means a minor bump — the owner's
-call, not the agent's. Shipped as 1.1.10 under the existing discipline; the owner may recut as 1.2.0.
+call, not the agent's. Shipped as 1.1.11 on the owner's decision (patch line); the owner may still
+recut the line as 1.2.0.
 
 ## v1.1.3 — the routing audit is the decision, not the topology
 
@@ -1125,7 +1126,7 @@ Deliberate DSH-specific deviations from the original:
   mount audit, taking the standard tools with it.
 - Skill registration warnings are non-fatal but leave the catalog entry
   absent — check host logs for `orch-lite: skill ... could not be registered`.
-- Profile-conflict banner absent (v1.1.10+): the running profile still holds
+- Profile-conflict banner absent (v1.1.11+): the running profile still holds
   the **old copy** of the package (the profile installs a copy, not a link);
   the page was not reloaded after the restart that served the new bundle; the
   pack dropped `lib/client.js`; `exports["./client"]` or `dsh.client` is

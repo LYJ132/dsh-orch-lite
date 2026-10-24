@@ -4,7 +4,7 @@ All notable changes to this bundle. Rationale for each decision lives in `DEVLOG
 the short form. Dates are omitted on purpose — the project is developed in a single continuous line
 and `DEVLOG.md` carries the ordering.
 
-## 1.1.10 — the gate stops trusting the wrong population, and the bundle names both silent conflicts
+## 1.1.11 — the gate stops trusting the wrong population, the arrow becomes a cut, and the bundle names both silent conflicts
 
 Four changes from a live orchestrating session: three holes it exposed, one hardening of this
 bundle's own git plumbing, and the browser half that names the two silent profile conflicts.
@@ -70,6 +70,20 @@ The banner never offers re-enabling: enabling a bundle appends it to the end of 
 list and changes patch precedence, so that stays a deliberate act in **Plugins**. Turning Team off
 removes the bundle's `disabled: true` overrides, which is what restores the four child-control tools.
 Colours use only `--dsw-alias-*` tokens.
+
+**The declaration's arrow becomes a branch cut.** The orchestration declaration could say `A → B`
+while `create` always cut from the current `HEAD`, so a feature whose acceptance criteria needed
+another feature's fix landed in an area that could never pass its own tests. Both places that can
+declare the edge now carry it: the dispatch package accepts an optional `depends_on` array (each entry
+validated by the same kebab slug rule as `feature_id`, self-dependency refused), and
+`orch_tool({ action: "create" })` resolves the dependency branch tip as the base commit — or, when an
+explicit `base` is given, verifies every dependency is already an ancestor of it — reporting
+`base_ref` / `base_commit`. The gate finishes the job with
+`git merge-base --is-ancestor feature/<dep> feature/<fid>`, because whether the edge holds is
+repository state, not package text. A refusal names the missing merge, the exact proving command, and
+the one recovery that works: a cut already made is not re-cut by `create`, so merge, `remove`, drop
+the untouched feature branch, then create again. The field is additive — a package without it behaves
+exactly as before.
 
 ## 1.1.9 — the routing section is now the upstream text
 
