@@ -4,6 +4,15 @@ All notable changes to this bundle. Rationale for each decision lives in `DEVLOG
 the short form. Dates are omitted on purpose — the project is developed in a single continuous line
 and `DEVLOG.md` carries the ordering.
 
+## 1.1.9 — "End the turn" in upstream form, not a standalone section
+
+v1.1.8 had grown a standalone "After a dispatch: end the turn" section in both the protocol and the
+manual, with an invented elaboration ("do not read the files it is working on, do not run the tests
+it will run, do not review its output"). Upstream v1.3.2 writes the same rule as **step 6 of the
+NEW_TASK action table** — literally `6. **End the turn.**` — with no elaboration. This release
+restores that form: the standalone sections are gone; the manual's dispatch route now ends with
+`4. **End the turn.**`, and the protocol keeps only its routing-audit text.
+
 ## 1.1.8 — workers never route; the coordinator dispatches and stops
 
 Three fixes from a live test of v1.1.7:

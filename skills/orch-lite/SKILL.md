@@ -39,10 +39,9 @@ One route — the area never depends on who else is running:
 1. `orch_tool({ action: "create", feature_id })` → `.worktrees/<fid>/` on branch `feature/<fid>` (idempotent; a `reused` + `note` return names the real path).
 2. `subagent({ cwd: "<the returned path>", description: "<a free-form label>", prompt })` with `"worktree"` set to that same absolute path. `cwd` puts the worker **inside** its area — omit it and the child writes beside someone else's branch.
 3. The dispatch receipt carries the child id; `list_agents` returns ids, labels and status — look there, do not memorize. `inactive` → resume with `send_message({agent_id})`; `running` → await its settlement notice.
+4. **End the turn.**
 
 The area makes merge, cleanup, a crashed agent and hand-off routine — one call. Wide sweeps go to `explore`, never get one.
-
-**After a dispatch: end the turn.** The package is composed and the agent is running; its report arrives as its own message. Do not read the files it is working on, do not run the tests it will run, do not review its output — a dispatched task is not a preview of your own work. Dispatch, then stop.
 
 **No repository?** `create` bootstraps the minimum one in the session's own working folder (`git init -b main` + baseline commit of all existing files, secret safety net first) — repeat that to the user. Walk-up runs first: inside an existing repository nothing is bootstrapped — no nested repo.
 
