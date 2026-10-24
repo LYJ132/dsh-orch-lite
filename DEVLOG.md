@@ -4,6 +4,61 @@ Decision history and rationale for this plugin. Plugin code, skills, prompts,
 and tool messages carry only current rules and runtime facts; the "why we did
 it this way" lives here.
 
+## Unreleased — the git plumbing is hardened to the shipped service's level
+
+The plugin's subprocess boundary was the least defensive part of the bundle: it
+cleared four `GIT_*` variables, ran git through whatever hooks, fsmonitor and
+filter drivers the user's repository (or global config) configured, and worked
+around `.worktrees/` noise by editing the repository's **tracked** `.gitignore` —
+a file that belongs to the user.
+
+Four changes, each mirroring the shipped
+`@deepseek-ai/dsh-experimental-worktree` service:
+
+- **The inherited environment is scrubbed properly.** An inherited `GIT_DIR`,
+  `GIT_INDEX_FILE`, `GIT_OBJECT_DIRECTORY`, `GIT_ALTERNATE_OBJECT_DIRECTORIES`,
+  `GIT_ATTR_SOURCE`, `GIT_REPLACE_REF_BASE` (and the rest of the list in
+  `lib/git.js`) silently retargets git at another repository, index or object
+  store. The list is now the service's full one; `GIT_CONFIG_COUNT=0` still drops
+  inherited `GIT_CONFIG_KEY_n`, and `GIT_NO_LAZY_FETCH=1` / `GIT_LFS_SKIP_SMUDGE=1`
+  keep a bounded call off the network.
+- **Repository hooks and the fsmonitor daemon never run.** Every call is
+  `git -c core.hooksPath=/dev/null -c core.fsmonitor=false …`, the service's own
+  spelling. A `post-checkout` or `reference-transaction` hook doing anything slow,
+  interactive or destructive would otherwise fire inside an allocation the tool
+  promised to bound.
+- **Allocation is `worktree add --no-checkout` followed by one controlled
+  `reset --hard --no-recurse-submodules`.** Deferring every file write to that one
+  call is what makes the third defence possible: every repository-configured
+  filter driver (`filter.<driver>.{clean,smudge,process}` from local, global or
+  system config) is blanked through `GIT_CONFIG_KEY_n` and pinned
+  `required=false` for that call only. A smudge driver is arbitrary code; running
+  a user's filter during a checkout this tool performs is exactly the accident
+  the guard removes.
+- **The pool ignores itself.** `<root>/.worktrees/.gitignore` containing a single
+  `*` line hides the whole pool — including itself, and including unregistered
+  leftovers — from the user's `git status`, so a `create` never edits the
+  repository's tracked `.gitignore` again. The bare `*` is the service's shape.
+  The bootstrap path still writes the secret safety net into the repository's own
+  `.gitignore` (credentials must stay out of the baseline commit) and now
+  allocates the pool ignore *before* `git add -A`, so a pre-existing
+  `.worktrees/` cannot leak into that commit either.
+
+Deliberately **not** adopted from the service: its directory layout and naming
+(`.agents/worktrees/worktree-<uuid>`) — `.worktrees/<feature_id>` and
+`feature/<feature_id>` are this preset's published contract, named by the gate's
+reason strings and both manuals — and its fusion of creation with moving the
+session's working directory, which would collide with the per-child isolation
+this preset exists to provide. The `git worktree add` here still creates the
+branch (`-b`) or attaches to the existing one, and keeps working from the
+repository root.
+
+Verification lives in the suite: the recorded spawn argv/env pins the scrub list,
+the flags and the filter overrides; a *required* smudge driver that cannot run
+proves the neutralisation functionally (a working, byte-identical checkout), and
+the tracked `.gitignore` plus `git status --porcelain` are asserted byte-for-byte
+before and after an allocation.
+
 ## The version-number discipline (owner rule, 2026-10-04)
 
 **A patch bump (the third number, e.g. 1.1.0 → 1.1.1) is the agent's call. A minor or major bump
@@ -172,8 +227,11 @@ integration of the feature's own commits is not reported as a bypass.
   lane is still the only thing it may not touch.
 - **No platform dependency.** The upstream orch-lite 1.3.x answers this with a `doctor` CLI in
   Python; this bundle has no Python and no CLI, so the same facts are answered inside the tool
-  that already owns the areas. The DSH platform's own `create_worktree` tool is create-only and
-  off by default — it is not a substitute, and it is not the mechanism here.
+  that already owns the areas. The DSH platform's own `create_worktree` tool
+  (`@deepseek-ai/dsh-experimental-tool-worktree`) is create-only and ships as an **optional bundle —
+  currently enabled in this desktop profile**, so it is not the "off" mechanism it was once described
+  as; it is still not a substitute, because it moves the calling session's working directory and knows
+  nothing about this preset's lanes.
 
 ### Description binding removed (this feature)
 

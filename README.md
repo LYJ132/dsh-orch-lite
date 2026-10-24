@@ -106,9 +106,9 @@ Two platform behaviours matter here:
 | `lib/index.js` | preset half: protocol section, gate wiring, worker hint |
 | `lib/host.js` | host half: publishes the two manuals **and** `orch_tool` into the global layers (exported as `dsh-orch-lite/host`) |
 | `lib/tool.js` | the one work-area tool (`create` / `merge` / `remove` / `list` / `doctor`) |
-| `lib/workspace.js` | repository resolution, lazy bootstrap, `.gitignore`, feature-id validation |
+| `lib/workspace.js` | repository resolution, lazy bootstrap, the `.worktrees` pool and its self-ignoring `.gitignore`, feature-id validation |
 | `lib/gate.js` | the enforcement rules as pure functions (worker-lane path test, external-effect shell, opt-in package validation, agent classification) |
-| `lib/git.js` | the plugin's only subprocess boundary (git, argv-based, bounded, deadline-guarded) |
+| `lib/git.js` | the plugin's only subprocess boundary (git, argv-based, bounded, deadline-guarded, inherited-environment scrubbed, hooks and filter drivers neutralised) |
 | `lib/define-tool.js` | local `defineTool` (platform packages are not resolvable from a linked plugin) |
 | `skills/*/SKILL.md` | the two manuals, loaded on demand, registered globally at runtime |
 | `presets/orch-lite.patch.yml` | the bundle patch: the preset row (gate, protocol, `explore` lane) **and** the host row, plus the copied `standard` composition |
@@ -150,9 +150,10 @@ host is already running; that is the expected signal, not a failure.
   `ctx.subprocess`, `ctx.fs`, `agent.inject` and the session header fields (`cwd`, `id`,
   `parentSession`, `delegationDepth`, `agentPreset`). A breaking change there needs a plugin update,
   never a source patch.
-- **Runtime writes are workspace-level, by design**: `.worktrees/` and a `.gitignore` entry, plus the
-  lazy repository bootstrap in a folder that has none. Removing the bundle leaves those artifacts
-  behind; delete them if unwanted.
+- **Runtime writes are workspace-level, by design**: `.worktrees/` plus its own self-ignoring
+  `.gitignore` (the repository's tracked `.gitignore` is only touched by a bootstrap's secret safety
+  net), plus the lazy repository bootstrap in a folder that has none. Removing the bundle leaves
+  those artifacts behind; delete them if unwanted.
 
 ## Uninstall
 
