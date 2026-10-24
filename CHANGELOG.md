@@ -15,14 +15,18 @@ reads as idle, and continuation is impossible), and the Git Worktrees bundle add
 
 The package now ships a **client half** — `lib/client.js`, declared through `dsh.client`
 (`platform: web`, `immediately: true`, `inject: ["@deepseek-ai/dsh-client-ui-conversation"]`) and
-packed in `files`. It registers **one** entry in `conversation.input.dock`, the session-scoped list
-slot above the composer, and requires only `react` — no Harness client package. It reads
-`pluginManager.listBundles()` on mount, renders nothing while neither bundle is enabled, and for each
-enabled one prints the conflict, the side effect of switching it off, and a **Turn Team off** /
-**Turn Git Worktrees off** button. The click calls
+packed in `files`. It is attached to the global Loader row, which now uses the **bare** package
+specifier `dsh-orch-lite`: `dsh-client-modules` serves a `dsh.client` bundle only for a row whose
+specifier is the bare package name, and preset rows live in a separate tree it never scans. The
+preset-scoped enforcement therefore mounts from the `dsh-orch-lite/preset` subpath; the patch still
+carries two rows and the `orch-lite-host` row id is unchanged. The browser half registers **one**
+entry in the session-scoped `conversation.input.dock` list slot — the strip above the composer — and
+reads `pluginManager.listBundles()` on mount. It renders nothing while neither bundle is enabled, and
+for each enabled one prints the conflict, the side effect of switching it off, and a **Turn Team
+off** / **Turn Git Worktrees off** button. The click calls
 `pluginManager.setBundleEnabled(bundle, false)` and renders the Host's own `application` state
 (`applied` / `restart-required` / `overridden` / `failed` / `cancelled`) instead of assuming success;
-the list refreshes on `plugin-manager/changed`.
+the list refreshes on `plugin-manager/changed`. It requires only `react` — no Harness client package.
 
 The banner never offers re-enabling: enabling a bundle appends it to the end of the profile's bundle
 list and changes patch precedence, so that stays a deliberate act in **Plugins**. Turning Team off

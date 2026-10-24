@@ -59,6 +59,21 @@ shows the Host's own application state (`applied` / `restart-required` / `overri
 session-start banner and disappears entirely when nothing is enabled. The browser half requires only
 `react` — mounting it must never add a `@deepseek-ai/dsh-client-ui-*` dependency to this package.
 
+**Which Loader row the browser half attaches to (the constraint that moved a row).**
+`dsh-client-modules` scans `ctx.loader.entries()` — the root composition — and resolves a row's
+package only when `exactPackageSpecifier(row.options.name)` returns a name, which it does only for
+the **bare** package specifier; `dsh-orch-lite/preset` and `dsh-orch-lite/host` are subpaths and are
+skipped. Preset rows are worse off: `agent-preset-registry` mounts them into a `PresetTree` that
+deliberately detaches itself from `owner.subtree`, so a preset's `orch` row is never in
+`loader.entries()` at all. A `dsh.client` declaration on a preset-only row would therefore be
+served to nobody — the feature would look correct and never appear. The fix is structural and
+deliberately small: the **global host row now uses the bare specifier `dsh-orch-lite`** (its row id
+and behaviour are unchanged — that is the row the browser half attaches to), and the enforcement
+mounts from the new `dsh-orch-lite/preset` subpath via the preset's `orch` row. `package.json`
+exports `"."` and `"./host"` to `lib/host.js` and `"./preset"` to `lib/index.js`; the bundle patch
+keeps exactly two rows, so `orch-lite-host` overrides in a user's own patch still target the same
+row id.
+
 **Two shape facts worth writing down.** The remote namespaces answer `{ ok, value }` / `{ ok: false,
 error }`, not the bare value, so the banner unwraps (and tolerates the bare value). The Host result
 field is `application`, not `status`; `overridden` means a higher-priority profile layer still wins,

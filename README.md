@@ -16,7 +16,8 @@ and imports nothing from the platform.
 | Wide reads never consume a feature agent | `explore` agents answer read-only sweeps; the platform decides continuability by provider (spawn defines `prepareContinuable`); no `backgroundMode` config or `run_in_background` parameter exists |
 | A fresh empty folder can still take work | lazy repository bootstrap on the first `create` **whenever the folder has no enclosing repository**: `git init -b main`, a secret safety net written to `.gitignore`, a baseline commit of **all existing files** (so work areas check out the user's code); the notice rides back in the tool result |
 | Enforcement tracks the live session | the gate reads the current preset from the `agentPreset` Session projection, not just the creation header, so a mid-session preset switch cannot leave a session silently ungated |
-| Knowledge and capability are shared, enforcement is not | a host row publishes the two manuals **and** the `orch_tool` work-area tool into the **global** layers, so every preset can load the manuals and call the tool; the protocol section, the worker hint and the gate stay scoped to the `orch-lite` preset |
+| Knowledge and capability are shared, enforcement is not | a host row publishes the two manuals **and** the `orch_tool` work-area tool into the **global** layers, so every preset can load the manuals and call the tool; the protocol section, the worker hint and the gate stay scoped to the `orch-lite` preset (mounted from the `/preset` subpath) |
+| The two profile conflicts are visible | the browser half registers a composer banner (below) that names the Team and Git Worktrees conflicts and offers the one action that stops each; the global host row uses the **bare** package specifier because that is the row `dsh-client-modules` attaches a `dsh.client` bundle to |
 
 ## What the gate deliberately does not do
 
@@ -56,6 +57,10 @@ see either fight — it reads a session, not the profile's bundle selection:
 
 The bundle therefore ships a browser half (`lib/client.js`, declared through `dsh.client` with
 `platform: web`, `immediately: true` and `inject: ["@deepseek-ai/dsh-client-ui-conversation"]`). It
+is attached to the **bare** `dsh-orch-lite` Loader row — the global host row — because
+`dsh-client-modules` serves a `dsh.client` bundle only for the row whose specifier is the bare
+package name, and a preset's rows live in a detached tree it never scans; that is why the
+preset-scoped enforcement mounts from the `dsh-orch-lite/preset` subpath instead. The browser half
 registers **one** entry in the session-scoped `conversation.input.dock` list slot — the strip above
 the composer — and reads `pluginManager.listBundles()` on mount. When neither bundle is enabled it
 renders nothing. When one is, it prints that one line of conflict, the effect of switching it off,
@@ -81,8 +86,10 @@ half requires only the platform's `react` — no Harness client package, no styl
 
 ## Install
 
-The preset ships as one bundle patch (`presets/orch-lite.patch.yml`) that inserts a
-`@deepseek-ai/dsh-agent-preset` declaration row. Register the bundle with the profile:
+The preset ships as one bundle patch (`presets/orch-lite.patch.yml`) that inserts two rows: the
+`@deepseek-ai/dsh-agent-preset` declaration, and the global host row under the **bare** package
+specifier (the row that also carries the browser half; enforcement mounts from `/preset` inside the
+declaration). Register the bundle with the profile:
 
 ```text
 plugin_manager install_bundle  target: <absolute path to this directory>   # directory / link install
@@ -90,7 +97,7 @@ plugin_manager install_bundle  target: file:<path to the .tgz>            # tarb
 ```
 
 Then **restart the host process and open a NEW session**, selecting the `Orch-lite` preset.
-Two platform behaviours matter here:
+Three platform behaviours matter here:
 
 - source edits to a linked plugin are not hot-reloaded (the base composition only enables config
   watching), so a restart is required for JS changes;
@@ -135,8 +142,8 @@ Two platform behaviours matter here:
 
 | Path | Role |
 |---|---|
-| `lib/index.js` | preset half: protocol section, gate wiring, worker hint |
-| `lib/host.js` | host half: publishes the two manuals **and** `orch_tool` into the global layers (exported as `dsh-orch-lite/host`) |
+| `lib/index.js` | preset half: protocol section, gate wiring, worker hint (mounted by the preset's `orch` row from the `dsh-orch-lite/preset` subpath) |
+| `lib/host.js` | host half: publishes the two manuals **and** `orch_tool` into the global layers; the package root (bare specifier `dsh-orch-lite`, and `./host`), which is also the row `dsh.client` attaches the browser half to |
 | `lib/client.js` | browser half: the `conversation.input.dock` banner naming the Team and Git Worktrees conflicts, with the one action that stops each (exported as `dsh-orch-lite/client` through `dsh.client`) |
 | `lib/tool.js` | the one work-area tool (`create` / `merge` / `remove` / `list` / `doctor`) |
 | `lib/workspace.js` | repository resolution, lazy bootstrap, `.gitignore`, feature-id validation |
@@ -144,7 +151,7 @@ Two platform behaviours matter here:
 | `lib/git.js` | the plugin's only subprocess boundary (git, argv-based, bounded, deadline-guarded) |
 | `lib/define-tool.js` | local `defineTool` (platform packages are not resolvable from a linked plugin) |
 | `skills/*/SKILL.md` | the two manuals, loaded on demand, registered globally at runtime |
-| `presets/orch-lite.patch.yml` | the bundle patch: the preset row (gate, protocol, `explore` lane) **and** the host row, plus the copied `standard` composition |
+| `presets/orch-lite.patch.yml` | the bundle patch: the preset row (gate, protocol, `explore` lane) **and** the bare-named host row, plus the copied `standard` composition |
 | `scripts/gen-preset.mjs` | regenerates the preset patch from the shipped `standard` preset, keeping the copied composition honest |
 | `test/plugin.test.mjs` | the self-contained check suite (`npm test`, or `node test/plugin.test.mjs .`); excluded from the pack by the `files` list |
 | `DEVLOG.md` | decision history and rationale — the "why" behind every rule |
