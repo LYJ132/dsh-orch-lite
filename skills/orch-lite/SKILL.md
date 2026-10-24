@@ -57,7 +57,9 @@ State the plan in one compact line — tasks, branches, dependencies; each task 
 - `任务 @feature/login` — single · `[A, B]` — parallel · `A → B` — B waits
 - `[A, B] → C` — C waits for both · `[A → C, B → D]` — two dependency paths in parallel
 
-(A/B/C/D are `任务 @feature/<fid>` entries.) A `task` line without a declaration is an incomplete plan. Parallelism is the default; only a shared file or a true output dependency serializes.
+`A → B` is a cut edge: **B's area is cut after A merged** — `create` B with `depends_on: ["a"]`; the gate refuses a dependency that is not an ancestor of B's branch.
+
+(A/B/C/D are `任务 @feature/<fid>` entries.) A `task` line without a declaration is an incomplete plan.
 
 ## Feature package (mandatory for every subagent / subagent_fork dispatch)
 

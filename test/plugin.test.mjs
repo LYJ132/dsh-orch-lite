@@ -254,16 +254,23 @@ check('protocol has no silent empty state (no scope guard)', typeof protocol?.te
 	)
 	check('protocol carries the orchestration declaration syntax', body.includes('## Task Orchestration Declaration') && body.includes('任务 @feature/<fid>'))
 	check('protocol keeps the gate boundaries honest (gate vs routing)', body.includes('## Where you may act (the gate)') && body.includes('the routing protocol above, not the gate, decides what you handle yourself'))
-	// The gate denies four things now; the always-visible protocol must say so,
+	// The gate denies five things now; the always-visible protocol must say so,
 	// or a coordinator meets the denial with no idea it exists.
 	check(
-		'protocol names all four gate denials (lane git writes, external effects, wait_agent, create_worktree)',
-		body.includes('denies four things') &&
+		'protocol names all five gate denials (lane git writes, external effects, wait_agent, create_worktree, unmet depends_on)',
+		body.includes('denies five things') &&
 			body.includes('`stash`') &&
 			body.includes('Team-only `wait_agent`') &&
 			body.includes('settlement notice') &&
 			body.includes('`create_worktree`') &&
-			body.includes('create-only'),
+			body.includes('create-only') &&
+			body.includes('`depends_on`'),
+	)
+	check(
+		'protocol states that A → B cuts B\'s area after A merged',
+		body.includes('**An arrow is a cut, not a note.**') &&
+			body.includes('B\'s area is cut after A merged') &&
+			body.includes('`git merge-base --is-ancestor`'),
 	)
 	check('protocol demands the skill load', body.includes('Call the skill tool with name `orch-lite`'))
 	check('protocol carries the dispatch package shape', body.includes('acceptance_criteria') && body.includes('worktree') && body.includes('explore'))
@@ -316,6 +323,7 @@ check('both skills registered', skills.has('orch-lite') && skills.has('orch-lite
 	const manual = read('skills/orch-lite/SKILL.md')
 	const handbook = read('skills/orch-lite-executor/SKILL.md')
 	check('the coordinator manual stays under the pruner threshold', manual.length < 8192, String(manual.length))
+	check('the coordinator manual states that A → B cuts B\'s area after A merged', manual.includes('cut edge') && manual.includes('B\'s area is cut after A merged') && manual.includes('`depends_on: ["a"]`'))
 	check('the manual names the wait_agent denial and the settlement notice', manual.includes('Team-only `wait_agent`') && manual.includes('settlement notice'))
 	check('the manual names lane git writes among the lane denials', manual.includes('`stash`'))
 	check('the manual stops dispatched children at the top', manual.includes('<SUBAGENT-STOP>Dispatched child? Stop'))
@@ -994,6 +1002,184 @@ const GIT_ENV_SCRUB = [
 	const hardenedTracked = (await hardenedGit(['ls-files'])).split(/\r?\n/).filter(Boolean)
 	check('a pool ignore file is never committed', !hardenedTracked.some(path => path.startsWith('.worktrees/')), JSON.stringify(hardenedTracked))
 	rmSync(hardened, { recursive: true, force: true })
+}
+
+// --- depends_on: the A → B edge is cut into the work area, not just declared ------
+//
+// The orchestration declaration's `A → B` was prose: B's area was cut from
+// whatever HEAD was at the time, so a task that builds on A's fix started
+// without it and could never pass its own tests. `depends_on` puts the edge
+// into the base commit, and the gate proves it with the same question
+// `git merge-base --is-ancestor` answers.
+//
+// State here: `feature/docs` carries an unmerged commit; `feature/stale-demo`
+// was merged into `main` before this block.
+
+const packageFor = body =>
+	`You are the ${body.feature_id} feature agent.\nFirst call the skill tool with name orch-lite-executor and follow it.\n` +
+	'```json\n' + JSON.stringify(body) + '\n```'
+const areaOf = featureId => join(root, '.worktrees', featureId)
+const docsTip = (await git(['rev-parse', 'feature/docs'])).trim()
+const mainTip = (await git(['rev-parse', 'main'])).trim()
+
+// accept: cut from the dependency's tip, and say so
+const dependent = await callTool('create', { feature_id: 'depender', depends_on: ['docs'] })
+check(
+	'create accepts depends_on and cuts from the dependency tip',
+	dependent.created === true && dependent.base_ref === 'feature/docs',
+	JSON.stringify(dependent),
+)
+check(
+	'create reports the base commit it used',
+	dependent.base_commit === docsTip,
+	`${dependent.base_commit} vs ${docsTip}`,
+)
+check('the dependent area carries the dependency\'s commit', existsSync(join(areaOf('depender'), 'in-progress.txt')))
+check(
+	'the create render names the cut',
+	registered.get('orch_tool').output.render({}, dependent)[0].text.includes('cut from feature/docs'),
+	registered.get('orch_tool').output.render({}, dependent)[0].text,
+)
+
+// accept: an explicit base is allowed once every dependency is inside it
+const based = await callTool('create', { feature_id: 'depender-based', base: 'main', depends_on: ['stale-demo'] })
+check(
+	'create accepts a base that already contains the dependency',
+	based.created === true && based.base_ref === 'main' && based.base_commit === mainTip,
+	JSON.stringify(based),
+)
+
+// refuse: the dependency is not in the supplied base
+const unmergedCreate = await callTool('create', {
+	feature_id: 'depender-unmerged',
+	base: 'main',
+	depends_on: ['docs'],
+}).then(
+	() => null,
+	error => error.message,
+)
+check(
+	'create refuses a dependency that is not merged into the supplied base',
+	typeof unmergedCreate === 'string' && unmergedCreate.includes('feature/docs'),
+	unmergedCreate,
+)
+check(
+	'the create refusal names the merge and the command that proves it',
+	typeof unmergedCreate === 'string' && unmergedCreate.includes('git merge-base --is-ancestor feature/docs main'),
+	unmergedCreate,
+)
+check('the refused area was never created', !existsSync(areaOf('depender-unmerged')))
+
+// refuse: the dependency branch does not exist
+const missingCreate = await callTool('create', { feature_id: 'depender-missing', depends_on: ['ghost-feature'] }).then(
+	() => null,
+	error => error.message,
+)
+check(
+	'create refuses a dependency branch that does not exist',
+	typeof missingCreate === 'string' && missingCreate.includes('feature/ghost-feature'),
+	missingCreate,
+)
+check('the area behind the missing dependency was never created', !existsSync(areaOf('depender-missing')))
+
+// refuse: a malformed or self-referential dependency (same rule as the package)
+await rejects('create refuses a malformed depends_on entry', () => callTool('create', { feature_id: 'depender-bad', depends_on: ['Not A Slug'] }))
+await rejects('create refuses a depends_on that is not an array', () => callTool('create', { feature_id: 'depender-scalar', depends_on: 'docs' }))
+await rejects('create refuses a feature depending on itself', () => callTool('create', { feature_id: 'depender-self', depends_on: ['depender-self'] }))
+
+// accept: a dispatch whose dependency is an ancestor of its own branch
+{
+	const accepted = await gate({
+		agent: MAIN,
+		name: 'subagent',
+		arguments: {
+			description: 'depender',
+			prompt: packageFor({ feature_id: 'depender', objective: 'o', acceptance_criteria: ['c'], worktree: areaOf('depender'), depends_on: ['docs'] }),
+		},
+	})
+	check('a dispatch whose dependency is merged reaches the tool', accepted.nextCalled, accepted.decision?.reason)
+	// additive: the field is optional, so a package written before it existed is untouched
+	const additive = await gate({
+		agent: MAIN,
+		name: 'subagent',
+		arguments: {
+			description: 'plain',
+			prompt: packageFor({ feature_id: 'depender', objective: 'o', acceptance_criteria: ['c'], worktree: areaOf('depender') }),
+		},
+	})
+	check('a package without depends_on is unaffected (additive field)', additive.nextCalled, additive.decision?.reason)
+}
+
+// refuse: a malformed entry in the package
+{
+	const shaped = async depends_on =>
+		gate({
+			agent: MAIN,
+			name: 'subagent',
+			arguments: {
+				description: 'depender',
+				prompt: packageFor({ feature_id: 'depender', objective: 'o', acceptance_criteria: ['c'], worktree: areaOf('depender'), depends_on }),
+			},
+		})
+	const bad = await shaped(['Docs!'])
+	check(
+		'a malformed depends_on entry is refused, naming the field',
+		bad.decision?.kind === 'deny' && bad.decision.reason.includes('depends_on'),
+		bad.decision?.reason,
+	)
+	const scalar = await shaped('docs')
+	check(
+		'a non-array depends_on is refused, naming the field',
+		scalar.decision?.kind === 'deny' && scalar.decision.reason.includes('depends_on'),
+		scalar.decision?.reason,
+	)
+}
+
+// refuse: the dependency is not an ancestor of the area's branch
+{
+	await callTool('create', { feature_id: 'loner' })
+	const unmerged = await gate({
+		agent: MAIN,
+		name: 'subagent',
+		arguments: {
+			description: 'loner',
+			prompt: packageFor({ feature_id: 'loner', objective: 'o', acceptance_criteria: ['c'], worktree: areaOf('loner'), depends_on: ['docs'] }),
+		},
+	})
+	check('a dispatch whose dependency is not merged is refused', unmerged.decision?.kind === 'deny', unmerged.decision?.reason)
+	check(
+		'the unmerged refusal names the missing merge and the proving command',
+		String(unmerged.decision?.reason).includes('git merge-base --is-ancestor feature/docs feature/loner'),
+		unmerged.decision?.reason,
+	)
+	// refuse: the dependency branch does not exist at all
+	const absent = await gate({
+		agent: MAIN,
+		name: 'subagent',
+		arguments: {
+			description: 'loner',
+			prompt: packageFor({ feature_id: 'loner', objective: 'o', acceptance_criteria: ['c'], worktree: areaOf('loner'), depends_on: ['ghost-feature'] }),
+		},
+	})
+	check(
+		'a dependency branch that does not exist is refused, naming it',
+		absent.decision?.kind === 'deny' && absent.decision.reason.includes('feature/ghost-feature'),
+		absent.decision?.reason,
+	)
+	// refuse: the task's own area was never created, so the edge has nothing to hold against
+	const noArea = await gate({
+		agent: MAIN,
+		name: 'subagent',
+		arguments: {
+			description: 'never-created',
+			prompt: packageFor({ feature_id: 'never-created', objective: 'o', acceptance_criteria: ['c'], worktree: areaOf('never-created'), depends_on: ['docs'] }),
+		},
+	})
+	check(
+		'a dispatch naming an area that was never created is refused',
+		noArea.decision?.kind === 'deny' && noArea.decision.reason.includes('create'),
+		noArea.decision?.reason,
+	)
 }
 
 rmSync(root, { recursive: true, force: true })
