@@ -254,14 +254,16 @@ check('protocol has no silent empty state (no scope guard)', typeof protocol?.te
 	)
 	check('protocol carries the orchestration declaration syntax', body.includes('## Task Orchestration Declaration') && body.includes('任务 @feature/<fid>'))
 	check('protocol keeps the gate boundaries honest (gate vs routing)', body.includes('## Where you may act (the gate)') && body.includes('the routing protocol above, not the gate, decides what you handle yourself'))
-	// The gate denies three things now; the always-visible protocol must say so,
+	// The gate denies four things now; the always-visible protocol must say so,
 	// or a coordinator meets the denial with no idea it exists.
 	check(
-		'protocol names all three gate denials (lane git writes, external effects, wait_agent)',
-		body.includes('denies three things') &&
+		'protocol names all four gate denials (lane git writes, external effects, wait_agent, create_worktree)',
+		body.includes('denies four things') &&
 			body.includes('`stash`') &&
 			body.includes('Team-only `wait_agent`') &&
-			body.includes('settlement notice'),
+			body.includes('settlement notice') &&
+			body.includes('`create_worktree`') &&
+			body.includes('create-only'),
 	)
 	check('protocol demands the skill load', body.includes('Call the skill tool with name `orch-lite`'))
 	check('protocol carries the dispatch package shape', body.includes('acceptance_criteria') && body.includes('worktree') && body.includes('explore'))
@@ -533,6 +535,54 @@ check('no registration warnings', warnings.length === 0, warnings.join(' | '))
 	const noRepo = { session: { header: { id: 'no-repo-wait', cwd: join(tmpdir(), 'orch-definitely-not-a-repo'), agentPreset: 'orch-lite', delegationDepth: 0 } } }
 	const noRepoWait = await gate({ agent: noRepo, name: 'wait_agent', arguments: {} })
 	check('the wait_agent denial does not need a repository', noRepoWait.decision?.kind === 'deny', noRepoWait.decision?.reason)
+}
+
+// --- gate: the relocating create_worktree -----------------------------------------
+//
+// The optional Git Worktrees bundle contributes exactly one tool, and its
+// create path ends by moving the session's own working directory into the new
+// checkout. A coordinator that calls it re-roots every later orch_tool call, so
+// the rule sits beside the wait_agent denial — before the repository probe,
+// because after the relocation the probe would answer about the wrong tree.
+
+{
+	const mainCreate = await gate({ agent: MAIN, name: 'create_worktree', arguments: { branch: 'spike' } })
+	check('the coordinator is denied the relocating create_worktree', mainCreate.decision?.kind === 'deny', mainCreate.decision?.reason)
+	const reason = mainCreate.decision?.reason ?? ''
+	check(
+		'the create_worktree denial names the origin bundle',
+		reason.includes('Git Worktrees') && reason.includes('dsh-experimental-tool-worktree'),
+		reason,
+	)
+	check(
+		'the create_worktree denial names the create-only relocating behaviour',
+		reason.includes('create-only') && reason.includes('working directory') && reason.includes('.agents/worktrees'),
+		reason,
+	)
+	check(
+		'the create_worktree denial names the preset route (orch_tool create + subagent cwd)',
+		reason.includes('orch_tool({ action: "create", feature_id })') && reason.includes('subagent({ cwd })'),
+		reason,
+	)
+	const leadCreate = await gate({ agent: LEAD, name: 'create_worktree', arguments: {} })
+	check('a Team lead with delegationDepth 0 is denied create_worktree too', leadCreate.decision?.kind === 'deny', leadCreate.decision?.reason)
+	// A dispatched child owns its area and is not routed at all; the same
+	// fail-open that covers wait_agent has to cover this tool.
+	const childCreate = await gate({ agent: CHILD, name: 'create_worktree', arguments: {} })
+	check('a dispatched worker calling create_worktree is not blocked by this gate', childCreate.nextCalled, childCreate.decision?.reason)
+	const foreignCreate = await gate({ agent: { session: { header: { id: 'f3', cwd: root, agentPreset: 'standard' } } }, name: 'create_worktree', arguments: {} })
+	check('a non-orch-lite session keeps its create_worktree', foreignCreate.nextCalled, foreignCreate.decision?.reason)
+	// The denial runs before the repository probe and needs no working tree.
+	const noRepoCreate = await gate({
+		agent: { session: { header: { id: 'no-repo-create', cwd: join(tmpdir(), 'orch-definitely-not-a-repo'), agentPreset: 'orch-lite', delegationDepth: 0 } } },
+		name: 'create_worktree',
+		arguments: {},
+	})
+	check('the create_worktree denial does not need a repository', noRepoCreate.decision?.kind === 'deny', noRepoCreate.decision?.reason)
+	// The rule is a name list, not a pattern: a neighboring tool from another
+	// bundle is not the gate's to judge.
+	const lookalikeTool = await gate({ agent: MAIN, name: 'worktree_list', arguments: {} })
+	check('an unrelated tool name is untouched by the rule', lookalikeTool.nextCalled, lookalikeTool.decision?.reason)
 }
 
 // --- gate: dispatch is opt-in ----------------------------------------------------
