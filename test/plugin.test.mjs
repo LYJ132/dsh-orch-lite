@@ -318,8 +318,8 @@ check('both skills registered', skills.has('orch-lite') && skills.has('orch-lite
 {
 	const yml = readFileSync(join(pkg, 'presets', 'orch-lite.patch.yml'), 'utf8')
 	check(
-		'the preset patch carries the host row',
-		yml.includes('- id: orch-lite-host') && yml.includes("'dsh-orch-lite/host'"),
+		'the preset patch carries the host row under the bare package name',
+		yml.includes('- id: orch-lite-host') && /^ {6}name: 'dsh-orch-lite'$/m.test(yml),
 	)
 	check('the patch uses no tabs', !yml.includes('\t'))
 	check('the patch ends with a newline', yml.endsWith('\n'))
@@ -328,11 +328,18 @@ check('both skills registered', skills.has('orch-lite') && skills.has('orch-lite
 	check('the preset row sits at the insert-list level', /^ {4}- id: preset-orch-lite$/m.test(yml))
 	check(
 		'the host row is the preset row\'s sibling, not nested inside it',
-		/^ {4}- id: orch-lite-host$/m.test(yml) && /^ {6}name: 'dsh-orch-lite\/host'$/m.test(yml),
+		/^ {4}- id: orch-lite-host$/m.test(yml),
 	)
 	check(
 		'our two rows sit inside the preset plugin list',
 		/^ {10}- id: orch$/m.test(yml) && /^ {10}- id: tool-subagent-explore$/m.test(yml),
+	)
+	// dsh-client-modules serves a `dsh.client` bundle only for the Loader row whose
+	// specifier is the BARE package name, and it never scans a preset's detached
+	// tree — so the root host row must stay bare and enforcement must be a subpath.
+	check(
+		'the preset row mounts the enforcement from the /preset subpath',
+		/^ {10}- id: orch$/m.test(yml) && /^ {12}name: 'dsh-orch-lite\/preset'$/m.test(yml),
 	)
 	check(
 		'the copied standard composition is intact',
@@ -344,6 +351,12 @@ check('both skills registered', skills.has('orch-lite') && skills.has('orch-lite
 	)
 	const manifest = JSON.parse(readFileSync(join(pkg, 'package.json'), 'utf8'))
 	check('the manifest exports the host subpath', manifest.exports?.['./host'] === './lib/host.js')
+	check(
+		'the package root is the global host half (the row the browser half attaches to)',
+		manifest.main === 'lib/host.js' && manifest.exports?.['.'] === './lib/host.js',
+		`${manifest.main} / ${manifest.exports?.['.']}`,
+	)
+	check('the preset half is exported as /preset', manifest.exports?.['./preset'] === './lib/index.js', manifest.exports?.['./preset'])
 	check('the pack file list includes the module directory', Array.isArray(manifest.files) && manifest.files.includes('lib'))
 }
 
