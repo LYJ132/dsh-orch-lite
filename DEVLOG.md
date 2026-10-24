@@ -4,6 +4,50 @@ Decision history and rationale for this plugin. Plugin code, skills, prompts,
 and tool messages carry only current rules and runtime facts; the "why we did
 it this way" lives here.
 
+## Unreleased — `depends_on`: the declaration's arrow becomes a branch cut
+
+The orchestration declaration could say `A → B`, and nothing tied that edge to the
+branch cut. `create` always cut from the current `HEAD`, so when B's acceptance
+criteria needed A's fix, B's area was allocated before that fix existed — the
+dependency was still on `feature/A`. The child then met a tree in which its own
+criteria were unsatisfiable: it either reported STUCK (wasting a whole dispatch)
+or "fixed" the missing behaviour itself, editing code another agent owns.
+
+The field is the fix, and it is additive: `depends_on` is optional, so every
+package written before it existed behaves exactly as before.
+
+- **The base becomes explicit, not implied.** `create` with `depends_on: ["a"]`
+  resolves `feature/a`'s tip and uses it as the base commit, so allocation
+  materialises the dependency's tree. With an explicit `base`, the base is
+  trusted only after every dependency is proven to be inside it — the
+  "A is already merged into main, cut B from main" case. The result reports
+  `base_ref` and `base_commit`, so the worker reads where it starts instead of
+  guessing.
+- **Two refusals, both before any checkout.** A dependency branch that does not
+  exist (`feature/<id>` was never created, or is misspelled) and a dependency
+  that is not an ancestor of the base are refused, and neither leaves an area,
+  a branch or a pool write behind.
+- **The gate asks the same question of the dispatch.** Whether the edge is real
+  is repository state, not package text, so `evaluateDispatch` stays pure (it
+  only decides the shape: an array of feature slugs, never the feature itself)
+  and the gate finishes the job with `git merge-base --is-ancestor
+  feature/<dep> feature/<fid>`. The deny reason names that exact command, so a
+  human can reproduce the verdict with one line. An area that was never created
+  is refused too: its `depends_on` has nothing to be checked against.
+- **The arrow says what it means.** The protocol and the coordinator manual now
+  state in one line that `A → B` means B's area is cut after A merged — the
+  declaration used to be a shape with no stated consequence.
+
+`git merge-base --is-ancestor` counts a commit as its own ancestor, which is why
+cutting straight from a dependency's tip needs no special case, and why an area
+allocated with `depends_on` and then dispatched with the same list passes.
+
+Deliberately not done: no automatic merge of the dependency before allocation
+(that is the coordinator's `merge` decision, and it is visible in the
+declaration), no dependency graph stored anywhere (git already is the graph),
+and no ordering enforcement between areas that run in parallel — only the cut
+point is the tool's business.
+
 ## Unreleased — the git plumbing is hardened to the shipped service's level
 
 The plugin's subprocess boundary was the least defensive part of the bundle: it
