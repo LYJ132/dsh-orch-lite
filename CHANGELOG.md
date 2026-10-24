@@ -6,14 +6,25 @@ and `DEVLOG.md` carries the ordering.
 
 ## 1.1.8 — workers never route; the coordinator dispatches and stops
 
-Three fixes from a live test of v1.1.7:
+Four fixes from a live test of v1.1.7:
 
-**Dispatched children no longer emit `[routing]` lines.** The protocol section is injected into every
+**The contract is delivered at session start, not buried in the system prompt.** Upstream does not
+ship an always-visible protocol section: its `SessionStart` hook (`hooks/session-init.py`) prints
+`additionalContext` containing the contract sections **extracted verbatim from SKILL.md**, and a
+`PreToolUse` hook validates dispatches. The section at order 2850 sat in the middle of the system
+prompt and read as background, so the model answered without the `[routing]` line. `agent/created`
+now injects the same contract as the orchestrating session's first message — routing audit, gate and
+dispatch package, each extracted verbatim from the manual and labelled with its source — mirroring
+upstream's channel. The systemPrompt section is now a pointer (worker guard, job statement, where the
+contract lives), so no contract text is duplicated and the manual stays the single source of truth.
+
+**Dispatched children no longer emit `[routing]` lines.** The protocol section was injected into every
 session bound to the preset — including the child sessions a dispatch creates — so a worker read the
-coordinator's "MUST output `[routing]` first" rule and complied. Both the protocol section and the
+coordinator's "MUST output `[routing]` first" rule and complied. Both the protocol pointer and the
 manual now open with an explicit stop: a dispatched child ignores the coordinator contract, its
-handbook is `orch-lite-executor`, and it never emits a `[routing]` line (the protocol guard is
-text-level; the manual carries the upstream-style `<SUBAGENT-STOP>` marker).
+handbook is `orch-lite-executor`, and it never emits a `[routing]` line (the manual carries the
+upstream-style `<SUBAGENT-STOP>` marker). A worker is injected the reporting hint only, never the
+contract.
 
 **Assess before dispatching.** A search or narrow read with a known path, ~≤3 files and one specific
 fact is `chat` and never gets a work area; the text now says so outright, and adds the test: if you
@@ -22,9 +33,9 @@ cannot say in one sentence why this needs an agent rather than a direct read, it
 **End the turn, in upstream form.** After a dispatch the coordinator stops. Upstream v1.3.2 writes
 the rule as step 6 of the NEW_TASK action table — literally `6. **End the turn.**` — with no
 elaboration, and this release keeps that form: the manual's dispatch route ends with
-`4. **End the turn.**`, and the protocol carries no extra prose about it. An earlier draft had grown
-a standalone section with an invented elaboration ("do not read the files, do not run the tests, do
-not review its output"); that was removed in favour of the upstream one-liner.
+`4. **End the turn.**`. An earlier draft had grown a standalone section with an invented elaboration
+("do not read the files, do not run the tests, do not review its output"); that was removed in favour
+of the upstream one-liner.
 
 ## 1.1.7 — routing protocol upgraded to decision-flow quality
 

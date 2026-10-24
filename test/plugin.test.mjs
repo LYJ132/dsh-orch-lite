@@ -210,14 +210,10 @@ check('protocol section at order 2850, interpolate false', protocol?.order === 2
 check('protocol has no silent empty state (no scope guard)', typeof protocol?.text === 'function' && protocol.text({ scope: 'any-scope' }).startsWith('# Mode: orch-lite'))
 {
 	const body = protocol?.text({ scope: 'orch-preset-mount' }) ?? ''
-	check('protocol states the coordinator may write its own files', body.includes('## Where you may act') && body.includes('Your own project files: write freely'))
-	check('protocol names the two denials', body.includes('.worktrees/<feature_id>/`: denied') && body.includes('outside the repository: denied'))
-	check('protocol carries routing audit (step 0, first section after the intro)', body.includes('[routing] chat') && body.indexOf('## Step 0: the routing audit') < body.indexOf('## Where you may act'))
-	check('protocol routing is MUST-strength, not a suggestion', body.includes('RFC-2119 MUST') && body.includes('highest-compliance instruction') && body.includes('FIRST line of every reply'))
-	check('protocol demands the skill load', body.includes('Call the skill tool with name `orch-lite`'))
-	check('protocol carries the dispatch package shape', body.includes('acceptance_criteria') && body.includes('worktree') && body.includes('explore'))
 	check('protocol stops dispatched children from routing', body.includes('Dispatched child? Stop') && body.includes('never emit a `[routing]` line'))
-	check('protocol tells the coordinator to assess before dispatching', body.includes('Assess before you dispatch'))
+	check('protocol states the job: dispatch and decide', body.includes('not to do the work, and not to double-check it'))
+	check('protocol points at the injected session contract', body.includes('injected as the first message of this session'))
+	check('protocol demands the skill load', body.includes('Call the skill tool with name `orch-lite`'))
 	// The old blanket claim is the exact thing that locked other skills out.
 	check('protocol no longer claims the main session never writes', !body.includes('never writes files'), body.match(/.{0,60}never writes.{0,20}/)?.[0] ?? '')
 }
@@ -355,13 +351,22 @@ check('no registration warnings', warnings.length === 0, warnings.join(' | '))
 	const injected = []
 	const fakeMain = { session: { header: { id: 'fresh-main', cwd: root, agentPreset: 'orch-lite', delegationDepth: 0 } }, inject: m => injected.push(m) }
 	await emit('agent/created', { agent: fakeMain, source: 'startup' })
-	check('the main session gets no boot contract (the protocol section is always visible)', injected.length === 0, JSON.stringify(injected))
+	const card = injected[0]?.content?.[0]?.text ?? ''
+	check('the orchestrating session gets its contract at session start', card.includes('[orch-lite] Session contract'), card.slice(0, 80))
+	check('the contract says it is not a user request to answer', card.includes('not a user request'))
+	check(
+		'the contract carries the routing audit verbatim from the manual',
+		card.includes('## Step 0: the routing audit') && card.includes('RFC-2119 MUST') && card.includes('FIRST line of every reply'),
+	)
+	check('the contract carries the gate and the dispatch package', card.includes('## Gate') && card.includes('## Feature package'))
+	check('each contract section names its source', card.includes('Routing audit (from the manual)') && card.includes('Dispatch package (from the manual)'))
 	const injectedChild = []
 	const fakeChild = { session: { header: { id: 'fresh-child', cwd: root, agentPreset: 'orch-lite', delegationDepth: 1, parentSession: 'fresh-main' } }, inject: m => injectedChild.push(m) }
 	await emit('agent/created', { agent: fakeChild, source: 'subagent' })
 	check('worker gets the reporting hint', injectedChild[0]?.content?.[0]?.text?.includes('dispatched worker'))
 	check('the hint fixes the reporting channel', injectedChild[0].content[0].text.includes('ENDING YOUR TURN'))
 	check('the hint does not restate a dispatch ban (the platform caps depth)', !injectedChild[0].content[0].text.includes('Never dispatch'))
+	check('a worker does not get the coordinator contract', !injectedChild[0].content[0].text.includes('Session contract'))
 	await emit('agent/created', { agent: { session: { header: { id: 'x', cwd: root, agentPreset: 'standard' } }, inject: () => check('standard session must not be touched', false) }, source: 'startup' })
 	check('non-orch-lite sessions are ignored', true)
 }

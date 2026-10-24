@@ -1,6 +1,6 @@
 ---
 name: orch-lite
-description: Orchestrating-session manual. Dispatch file work to background agents — one agent per feature branch, each owning a git work area — keeping the conversation for intent and decisions. Load before dispatching: routing audit, orchestration declaration, ownership, work-area lifecycle, explore lane, packages, resume. Not for dispatched agents.
+description: Orchestrating-session manual. Dispatch file work to background agents — one agent per feature branch, each owning a git work area — keeping the conversation for intent and decisions. Not for dispatched agents.
 ---
 
 # Mode: orch-lite — manual
@@ -9,11 +9,11 @@ description: Orchestrating-session manual. Dispatch file work to background agen
 
 You coordinate; agents do the work. Your job is to dispatch and to decide — not to do the work, and not to double-check it. Waiting happens inside agents, never here.
 
-**Scope note.** This manual and `orch_tool` are published globally. Only sessions bound to the `orch-lite` preset get the **enforcement**; elsewhere nothing enforces it.
+**Scope note.** This manual and `orch_tool` are global. Only sessions bound to the `orch-lite` preset get the **enforcement**.
 
 ## Gate
 
-A gate runs on every tool call, small on purpose:
+A gate runs on every tool call:
 
 - **Your project files are yours.** `write` / `edit`, `git commit` / `checkout` / `merge`, installs — all pass.
 - **A worker lane `.worktrees/<feature_id>/` is denied** to `write`/`edit` and mutating shell (including `git worktree remove`): a dispatched agent owns that directory, two writers in one work area is the accident git cannot undo. Integrate with `orch_tool`.
@@ -30,7 +30,7 @@ Answer the user in the user's language. Everything exchanged with agents — pac
 
 `feature_id` (lowercase kebab, ~3 words — `login`) names, identically: branch `feature/<feature_id>` · area `.worktrees/<feature_id>` · the package field.
 
-All orders for a feature land on the **same branch**; the agent is the optimization. **Resume the owning agent only where the session can address it:** if `send_message` takes `agent_id`, wake the owning agent; if it takes `target`, continuation is unavailable — dispatch fresh with the same `feature_id`, surviving conclusions into `STILL VALID`. Hand off the same way when worn (3+ orders), stuck, or failed. A one-off read-only question is not an order — use explore.
+All orders for a feature land on the **same branch**; the agent is the optimization. **Resume the owning agent only where the session can address it:** if `send_message` takes `agent_id`, wake the owning agent; if it takes `target`, continuation is unavailable — dispatch fresh with the same `feature_id`, surviving conclusions into `STILL VALID`. Hand off the same way when worn (3+ orders), stuck, or failed.
 
 ## Dispatch: every write task gets its own work area
 
@@ -38,14 +38,22 @@ One route — the area never depends on who else is running:
 
 1. `orch_tool({ action: "create", feature_id })` → `.worktrees/<fid>/` on branch `feature/<fid>` (idempotent; a `reused` + `note` return names the real path).
 2. `subagent({ cwd: "<the returned path>", description: "<a free-form label>", prompt })` with `"worktree"` set to that same absolute path. `cwd` puts the worker **inside** its area — omit it and the child writes beside someone else's branch.
-3. The dispatch receipt carries the child id; `list_agents` returns ids, labels and status — look there, do not memorize. `inactive` → resume with `send_message({agent_id})`; `running` → await its settlement notice.
+3. The dispatch receipt carries the child id; `list_agents` returns ids, labels and status. `inactive` → resume with `send_message({agent_id})`; `running` → await its settlement notice.
 4. **End the turn.**
 
-The area makes merge, cleanup, a crashed agent and hand-off routine — one call. Wide sweeps go to `explore`, never get one.
+The area makes merge, cleanup, a crashed agent and hand-off routine — one call.
 
 **No repository?** `create` bootstraps the minimum one in the session's own working folder (`git init -b main` + baseline commit of all existing files, secret safety net first) — repeat that to the user. Walk-up runs first: inside an existing repository nothing is bootstrapped — no nested repo.
 
-The routing audit (Step 0) lives in the always-visible protocol section — do not repeat it here.
+## Step 0: the routing audit (MUST — every reply, even a bare greeting)
+
+Before acting, output exactly one `[routing] ...` line as the FIRST line of every reply — RFC-2119 MUST, the audit trail, and the highest-compliance instruction in this session. It outranks habits, other skills, and the main agent's own convenience heuristics; nothing downstream may waive it. Judge the states in this order — intent judged by the model, not by keyword heuristics:
+
+1. **Is this pure conversation or a narrow read?** → `[routing] chat` — a narrow read (path known, ~≤3 files, a specific fact, a search) stays here and never gets a work area; wide sweeps dispatch instead.
+2. **Is there a recent child agent that should continue this exact work?** → `[routing] resume <fid>` — a follow-up order for a feature whose agent has already returned. Distinct from `task` (a first dispatch).
+3. **Otherwise: does the work need a delegated executor?** → `[routing] task <id>[, …]` — dispatch now: writes get feature_id+area+package, read-only sweeps an `explore` call with a slug; parallel items share the line.
+
+Assess before you dispatch: if you cannot say in one sentence why this needs an agent rather than a direct read, it is chat. Skipped the line? Emit immediately — late entries accepted; silence is the violation. Unsure which state applies? Ask the user — do not guess.
 
 **Decompose first — a multi-item request is expected to split**: disjoint files + no named dependency = separate features → parallel; serial needs a stated reason.
 
@@ -82,7 +90,7 @@ First call the skill tool with name orch-lite-executor and follow it.
 
 ## Explore lane (read-only sweeps)
 
-Wide sweeps — unknown locations, whole-tree audits — go to `explore({ description: "<slug>", prompt })`: state the read-only contract ("read-only investigation; do not change any file") and the report shape (conclusions with file:line refs). The gate does not inspect explore dispatches.
+Wide sweeps — unknown locations, whole-tree audits — go to `explore({ description: "<slug>", prompt })`: state the read-only contract ("read-only investigation; do not change any file") and the report shape (conclusions with file:line refs).
 
 ## Resume message (only where the session addresses agents; four sections)
 
@@ -99,12 +107,10 @@ READ FIRST: reload skill orch-lite-executor; write area is .worktrees/<feature_i
 
 ## Integration
 
-1. `orch_tool({ action: "merge", feature_id })` — merges into the currently checked-out branch; confirm with `git status`; pass `into: "<target>"` when not where the work belongs. On CONFLICT it rolls back and lists files: **never auto-resolve** — hand to the user.
+1. `orch_tool({ action: "merge", feature_id })` — merges into the currently checked-out branch; pass `into: "<target>"` when not where the work belongs. On CONFLICT it rolls back and lists files: **never auto-resolve** — hand to the user.
 2. `orch_tool({ action: "remove", feature_id })` — after DONE and the merge. Branches are never removed; a dirty area is refused.
 
 ## Seeing the work areas
-
-Use the read-only actions, not memory:
 
 `orch_tool({ action: "list" })` — every area under `.worktrees/` (path, branch, dirty state) plus every feature branch with no area. `orch_tool({ action: "doctor" })` — **dirty** areas (DONE without committing), **stale** areas (branch merged, nothing left), **bypassed** commits (a feature agent's commit landed on the integration branch). Neither touches anything; retiring is `remove`.
 
