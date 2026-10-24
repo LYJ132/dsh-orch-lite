@@ -276,6 +276,7 @@ check('both skills registered', skills.has('orch-lite') && skills.has('orch-lite
 		'lib/workspace.js',
 		'lib/gate.js',
 		'lib/git.js',
+		'lib/client.js',
 		'skills/orch-lite/SKILL.md',
 		'skills/orch-lite-executor/SKILL.md',
 		'presets/orch-lite.patch.yml',
@@ -344,6 +345,269 @@ check('both skills registered', skills.has('orch-lite') && skills.has('orch-lite
 	const manifest = JSON.parse(readFileSync(join(pkg, 'package.json'), 'utf8'))
 	check('the manifest exports the host subpath', manifest.exports?.['./host'] === './lib/host.js')
 	check('the pack file list includes the module directory', Array.isArray(manifest.files) && manifest.files.includes('lib'))
+}
+
+// --- the client half: the profile-conflict banner -------------------------------
+//
+// The browser half cannot be mounted in Node, so the harness supplies the two
+// things the module actually touches: `window.__ModuleLoader__` at registration
+// and a minimal React runtime (createElement / useState / useEffect). That is
+// enough to drive every acceptance case: the mount read, both conflict rows,
+// the click action, and each application state the Host can answer.
+
+{
+	const TEAM = '@deepseek-ai/dsh-experimental-agent-team-profile'
+	const WORKTREE = '@deepseek-ai/dsh-experimental-tool-worktree'
+
+	const manifest = JSON.parse(readFileSync(join(pkg, 'package.json'), 'utf8'))
+	const client = manifest.dsh?.client
+	check(
+		'the manifest declares the web client half',
+		client?.platform === 'web' &&
+			client?.immediately === true &&
+			Array.isArray(client?.inject) &&
+			client.inject.includes('@deepseek-ai/dsh-client-ui-conversation'),
+		JSON.stringify(client),
+	)
+	check(
+		'the client entry is exported and packed',
+		manifest.exports?.['./client'] === './lib/client.js' &&
+			Array.isArray(manifest.files) &&
+			manifest.files.includes('lib/client.js'),
+		JSON.stringify({ entry: manifest.exports?.['./client'], files: manifest.files }),
+	)
+
+	const source = readFileSync(join(pkg, 'lib', 'client.js'), 'utf8')
+	let spec
+	globalThis.window = { __ModuleLoader__: { load: value => { spec = value } } }
+	try {
+		await import(`data:text/javascript;base64,${Buffer.from(source).toString('base64')}`)
+	} finally {
+		delete globalThis.window
+	}
+	check('the client bundle registers under the package name', spec?.id === 'dsh-orch-lite', String(spec?.id))
+
+	// One mutable hook slot per mounted banner; the factory below captures this
+	// runtime, exactly as the browser kernel hands it `require('react')`.
+	let hookState
+	const fakeReact = {
+		createElement: (type, props, ...children) => ({
+			type,
+			props: { ...(props ?? {}), children: children.length <= 1 ? children[0] : children },
+		}),
+		useState(initial) {
+			const index = hookState.cursor++
+			if (!(index in hookState.values)) hookState.values[index] = initial
+			return [
+				hookState.values[index],
+				value => {
+					hookState.values[index] = typeof value === 'function' ? value(hookState.values[index]) : value
+				},
+			]
+		},
+		useEffect(run) {
+			hookState.cursor++
+			if (!hookState.mounted) hookState.queue.push(run)
+		},
+	}
+
+	const requires = []
+	const clientExports = spec.factory(name => {
+		requires.push(name)
+		return fakeReact
+	})
+	check('the client half requires only the platform react module', requires.join(',') === 'react', requires.join(', '))
+	check('the client half exports apply and inject', typeof clientExports.apply === 'function' && Array.isArray(clientExports.inject))
+	check(
+		'the client half needs the slots and plugin-manager services',
+		JSON.stringify(clientExports.inject) === JSON.stringify(['slots', 'remote.pluginManager']),
+		JSON.stringify(clientExports.inject),
+	)
+
+	const events = []
+	const registrations = []
+	let injections = 0
+	let listCalls = 0
+	const remoteAnswer = { ok: true, value: [{ name: TEAM, enabled: true }] }
+	const ctx = {
+		remote: {
+			pluginManager: {
+				listBundles: async () => {
+					listCalls++
+					return remoteAnswer
+				},
+				setBundleEnabled: async () => ({ ok: true, value: { application: 'applied' } }),
+			},
+			$on: (event, listener) => {
+				events.push(event)
+				return () => undefined
+			},
+		},
+		slots: {
+			inject(key, callback) {
+				injections++
+				check('the one injection is the composer dock', key === 'conversation.input.dock', key)
+				return callback()
+			},
+			register(options, Component) {
+				registrations.push({ options, Component })
+				return { dispose() {} }
+			},
+		},
+	}
+	clientExports.apply(ctx)
+	check(
+		'the client registers exactly one slot entry',
+		injections === 1 && registrations.length === 1,
+		`${injections} injections / ${registrations.length} registrations`,
+	)
+	const registration = registrations[0]
+	check(
+		'the registration names the dock slot and an entry id',
+		registration?.options?.name === 'conversation.input.dock' &&
+			typeof registration?.options?.id === 'string' &&
+			registration.options.id !== '',
+		JSON.stringify(registration?.options),
+	)
+	const face = registration.options.inject()
+	check('the injected face delegates the read to pluginManager.listBundles', (await face.pluginManager.listBundles()) === remoteAnswer && listCalls === 1)
+	face.pluginManager.subscribe(() => undefined)
+	check('the injected face refreshes on plugin-manager/changed', events.includes('plugin-manager/changed'), events.join(', '))
+
+	const mount = component => {
+		const state = { cursor: 0, values: [], queue: [], mounted: false, cleanup: undefined }
+		hookState = state
+		const render = props => {
+			hookState = state
+			state.cursor = 0
+			const tree = component(props)
+			if (!state.mounted) {
+				state.mounted = true
+				for (const run of state.queue) state.cleanup = run()
+			}
+			return tree
+		}
+		return { render, state }
+	}
+	const flush = async () => {
+		await Promise.resolve()
+		await new Promise(resolve => setTimeout(resolve, 0))
+	}
+	const textOf = node => {
+		if (node === null || node === undefined || node === false) return ''
+		if (typeof node === 'string' || typeof node === 'number') return String(node)
+		if (Array.isArray(node)) return node.map(textOf).join(' ')
+		return textOf(node.props?.children)
+	}
+	const collect = (node, predicate, found = []) => {
+		if (node === null || typeof node !== 'object') return found
+		if (Array.isArray(node)) {
+			for (const child of node) collect(child, predicate, found)
+			return found
+		}
+		if (predicate(node)) found.push(node)
+		collect(node.props?.children, predicate, found)
+		return found
+	}
+
+	/** Mount the banner against one enabled set and one scripted Host answer. */
+	const scene = async (enabled, answer) => {
+		const calls = []
+		const subscriptions = []
+		let unsubscribed = 0
+		const pluginManager = {
+			listBundles: async () => ({
+				ok: true,
+				value: [{ name: 'some-other-bundle', enabled: true }, ...enabled.map(name => ({ name, enabled: true }))],
+			}),
+			setBundleEnabled: async (name, value) => {
+				calls.push([name, value])
+				return answer
+			},
+			subscribe: listener => {
+				subscriptions.push(listener)
+				return () => {
+					unsubscribed++
+				}
+			},
+		}
+		const { render, state } = mount(registration.Component)
+		const draw = () => render({ pluginManager })
+		draw()
+		await flush()
+		return { draw, calls, subscriptions, state, unsubscribed: () => unsubscribed, text: () => textOf(draw()) }
+	}
+
+	const clean = await scene([], { ok: true, value: { application: 'applied' } })
+	check('the banner renders nothing when neither conflicting bundle is enabled', clean.draw() === null)
+
+	const both = await scene([TEAM, WORKTREE], { ok: true, value: { application: 'applied' } })
+	const tree = both.draw()
+	const text = textOf(tree)
+	check('the banner names the Team conflict', text.includes('Agent Team profile') && text.includes('reads as idle'))
+	check(
+		'the banner names the Git Worktrees conflict',
+		text.includes('create_worktree') && text.includes("moves the session's own working directory"),
+	)
+	check(
+		'the Team copy states the disabled:true overrides and the four restored tools',
+		text.includes('disabled:true overrides') &&
+			['tool-subagent-control', 'tool-subagent-list-agents', 'tool-subagent', 'tool-subagent-fork'].every(name => text.includes(name)),
+	)
+	check('the Team copy says child listing and continuation need those tools', text.includes('child listing and continuation need'))
+	check(
+		'the copy states re-enabling is never automatic, and why',
+		text.includes('Re-enabling is never automatic') && text.includes('appends it to the end of the profile bundle list'),
+	)
+	const buttons = collect(tree, node => node.type === 'button').map(node => textOf(node))
+	check('one action button per enabled conflict', buttons.join(' | ') === 'Turn Team off | Turn Git Worktrees off', buttons.join(' | '))
+	check('the banner subscribes on mount', both.subscriptions.length === 1)
+	both.state.cleanup()
+	check('unmounting disposes the subscription', both.unsubscribed() === 1)
+
+	const appliedRun = await scene([TEAM, WORKTREE], { ok: true, value: { application: 'applied' } })
+	collect(appliedRun.draw(), node => node.type === 'button' && textOf(node) === 'Turn Team off')[0].props.onClick()
+	await flush()
+	check(
+		'the Team button calls setBundleEnabled(bundle, false)',
+		appliedRun.calls.length === 1 && appliedRun.calls[0][0] === TEAM && appliedRun.calls[0][1] === false,
+		JSON.stringify(appliedRun.calls),
+	)
+	check('the returned application state is rendered', appliedRun.text().includes('Team off: applied'), appliedRun.text().slice(0, 160))
+
+	for (const answer of [
+		{ application: 'restart-required', restartReason: 'no-hmr' },
+		{ application: 'overridden' },
+		{ application: 'failed', error: { message: 'the profile is not writable' } },
+	]) {
+		const run = await scene([WORKTREE], { ok: true, value: answer })
+		collect(run.draw(), node => node.type === 'button' && textOf(node) === 'Turn Git Worktrees off')[0].props.onClick()
+		await flush()
+		check(
+			`the ${answer.application} application state is rendered`,
+			run.text().includes(`Git Worktrees off: ${answer.application}`),
+			run.text().slice(0, 200),
+		)
+		if (answer.application === 'failed') {
+			check('a failed application renders the Host error', run.text().includes('the profile is not writable'), run.text().slice(0, 200))
+		}
+	}
+
+	const refused = await scene([TEAM], { ok: false, error: { message: 'the profile is not managed' } })
+	collect(refused.draw(), node => node.type === 'button')[0].props.onClick()
+	await flush()
+	check(
+		'a refused remote answer renders as failed with its reason',
+		refused.text().includes('Team off: failed') && refused.text().includes('the profile is not managed'),
+		refused.text().slice(0, 200),
+	)
+
+	const tokens = [...source.matchAll(/--dsw-[A-Za-z0-9-]+/g)].map(match => match[0])
+	check(
+		'the client styles use only --dsw-alias-* tokens',
+		tokens.length > 0 && tokens.every(token => token.startsWith('--dsw-alias-')),
+		tokens.filter(token => !token.startsWith('--dsw-alias-')).join(', '),
+	)
 }
 
 // --- the version-number discipline --------------------------------------------
