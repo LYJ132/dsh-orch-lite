@@ -4,15 +4,6 @@ All notable changes to this bundle. Rationale for each decision lives in `DEVLOG
 the short form. Dates are omitted on purpose — the project is developed in a single continuous line
 and `DEVLOG.md` carries the ordering.
 
-## 1.1.9 — "End the turn" in upstream form, not a standalone section
-
-v1.1.8 had grown a standalone "After a dispatch: end the turn" section in both the protocol and the
-manual, with an invented elaboration ("do not read the files it is working on, do not run the tests
-it will run, do not review its output"). Upstream v1.3.2 writes the same rule as **step 6 of the
-NEW_TASK action table** — literally `6. **End the turn.**` — with no elaboration. This release
-restores that form: the standalone sections are gone; the manual's dispatch route now ends with
-`4. **End the turn.**`, and the protocol keeps only its routing-audit text.
-
 ## 1.1.8 — workers never route; the coordinator dispatches and stops
 
 Three fixes from a live test of v1.1.7:
@@ -28,10 +19,12 @@ text-level; the manual carries the upstream-style `<SUBAGENT-STOP>` marker).
 fact is `chat` and never gets a work area; the text now says so outright, and adds the test: if you
 cannot say in one sentence why this needs an agent rather than a direct read, it is chat.
 
-**After a dispatch: end the turn.** The package is composed and the agent is running; its report
-arrives as its own message. The coordinator does not read the files the agent is working on, does
-not run the tests the agent will run, and does not review its output — a dispatched task is not a
-preview of the coordinator's own work. Dispatch, then stop.
+**End the turn, in upstream form.** After a dispatch the coordinator stops. Upstream v1.3.2 writes
+the rule as step 6 of the NEW_TASK action table — literally `6. **End the turn.**` — with no
+elaboration, and this release keeps that form: the manual's dispatch route ends with
+`4. **End the turn.**`, and the protocol carries no extra prose about it. An earlier draft had grown
+a standalone section with an invented elaboration ("do not read the files, do not run the tests, do
+not review its output"); that was removed in favour of the upstream one-liner.
 
 ## 1.1.7 — routing protocol upgraded to decision-flow quality
 
