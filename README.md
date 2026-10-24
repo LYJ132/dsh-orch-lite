@@ -44,12 +44,40 @@ Next to it the bundle ships two runtime skills — `orch-lite` (coordinator manu
 preset-scoped. A session outside the preset therefore gets the discipline and the tool but no
 enforcement, which is why both manuals open with a scope note saying exactly that.
 
+## The profile-conflict banner (client half)
+
+Two bundles a desktop profile commonly mounts fight this preset silently, and the Node half cannot
+see either fight — it reads a session, not the profile's bundle selection:
+
+| Bundle | What it does to an orch-lite session |
+|---|---|
+| `@deepseek-ai/dsh-experimental-agent-team-profile` | its layer disables `tool-subagent-control`, `tool-subagent-list-agents`, `tool-subagent` and `tool-subagent-fork`, so a running dispatched child reads as idle and cannot be continued |
+| `@deepseek-ai/dsh-experimental-tool-worktree` | adds a create-only `create_worktree` whose create path moves the session's own working directory into `.agents/worktrees/<branch>`, so later children inherit that cwd |
+
+The bundle therefore ships a browser half (`lib/client.js`, declared through `dsh.client` with
+`platform: web`, `immediately: true` and `inject: ["@deepseek-ai/dsh-client-ui-conversation"]`). It
+registers **one** entry in the session-scoped `conversation.input.dock` list slot — the strip above
+the composer — and reads `pluginManager.listBundles()` on mount. When neither bundle is enabled it
+renders nothing. When one is, it prints that one line of conflict, the effect of switching it off,
+and a **Turn Team off** / **Turn Git Worktrees off** button; the click calls
+`pluginManager.setBundleEnabled(bundle, false)` and renders the Host's own application state
+(`applied` / `restart-required` / `overridden` / `failed` / `cancelled`) instead of claiming success.
+The list refreshes on `plugin-manager/changed`.
+
+Turning Team off removes that bundle's `disabled: true` overrides, which is what restores the four
+child-control tools child listing and continuation need. Nothing is ever re-enabled from the banner:
+enabling a bundle appends it to the end of the profile's bundle list and changes patch precedence, so
+that stays a deliberate act in **Plugins**. Colours use only `--dsw-alias-*` tokens and the browser
+half requires only the platform's `react` — no Harness client package, no stylesheet.
+
 ## Requirements
 
 - A DSH installation whose base profile provides `tools`, `systemPrompt`, `skills`, `subprocess`,
   `fs` and the `subagent` tool family. Nothing else: **no npm dependencies, no Python, no hook
   bridge** (the v0.1 hook bridge was removed in v0.2 — see `DEVLOG.md`).
 - Node built-ins only (`node:fs`, `node:path`, `node:os`, `node:url`, `node:crypto`).
+- For the browser half: a Web GUI release that serves `dsh.client` bundles (`dsh-client-modules`) and
+  mounts `conversation.input.dock`. `react` comes from the platform module table.
 
 ## Install
 
@@ -67,7 +95,9 @@ Two platform behaviours matter here:
 - source edits to a linked plugin are not hot-reloaded (the base composition only enables config
   watching), so a restart is required for JS changes;
 - sessions keep the preset revision they were created with, so an existing session will not pick up
-  a new revision — always test in a fresh session.
+  a new revision — always test in a fresh session;
+- the browser half is served over `/plugins`, so after the restart **reload the page**. A build that
+  removes `lib/client.js` from the pack breaks the banner loudly (the module fails activation).
 
 ## Verify after install
 
@@ -94,6 +124,12 @@ Two platform behaviours matter here:
 11. Call `orch_tool({ action: "list" })` and `orch_tool({ action: "doctor" })`: both are read-only, both
     report the work areas without touching the repository, and `doctor` names the dirty, stale and
     bypassed cases. Neither needs a `feature_id`.
+12. Profile-conflict banner: with **Agent Team** and/or **Git Worktrees** enabled in the profile, the
+    strip above the composer names the conflict and offers **Turn … off**. Clicking it reports the
+    Host's own state (`applied` / `restart-required` / `overridden` / `failed`) and the row disappears
+    once the bundle is off. With neither bundle enabled the banner is absent entirely.
+13. Turn Team off, then re-open **Plugins**: the four child-control tools are listed again and a
+    dispatched child can be listed and continued. Re-enabling Team stays manual, by design.
 
 ## Layout
 
@@ -101,6 +137,7 @@ Two platform behaviours matter here:
 |---|---|
 | `lib/index.js` | preset half: protocol section, gate wiring, worker hint |
 | `lib/host.js` | host half: publishes the two manuals **and** `orch_tool` into the global layers (exported as `dsh-orch-lite/host`) |
+| `lib/client.js` | browser half: the `conversation.input.dock` banner naming the Team and Git Worktrees conflicts, with the one action that stops each (exported as `dsh-orch-lite/client` through `dsh.client`) |
 | `lib/tool.js` | the one work-area tool (`create` / `merge` / `remove` / `list` / `doctor`) |
 | `lib/workspace.js` | repository resolution, lazy bootstrap, `.gitignore`, feature-id validation |
 | `lib/gate.js` | the enforcement rules as pure functions (worker-lane path test, external-effect shell, opt-in package validation, agent classification) |
@@ -123,7 +160,7 @@ link, so editing these sources does **not** reach the running application. Itera
 ```powershell
 cd <this directory>
 npm test                          # self-contained, needs a real git on PATH
-npm pack --dry-run                # preview the pack: 15 files (no lib/audit.js), LICENSE included
+npm pack --dry-run                # preview the pack: 16 files (no lib/audit.js), LICENSE included
 npm pack --pack-destination <dir> # produces dsh-orch-lite-<version>.tgz
 # then, from a session:
 plugin_manager install_bundle     target: file:<absolute path to the .tgz>

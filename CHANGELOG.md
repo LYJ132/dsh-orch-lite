@@ -4,6 +4,34 @@ All notable changes to this bundle. Rationale for each decision lives in `DEVLOG
 the short form. Dates are omitted on purpose — the project is developed in a single continuous line
 and `DEVLOG.md` carries the ordering.
 
+## 1.1.10 — the client half names the two silent profile conflicts
+
+Two bundles a desktop profile commonly mounts fight this preset without ever saying so, and the Node
+half cannot see either fight: the Agent Team profile layer disables `tool-subagent-control`,
+`tool-subagent-list-agents`, `tool-subagent` and `tool-subagent-fork` (so a running dispatched child
+reads as idle, and continuation is impossible), and the Git Worktrees bundle adds a create-only
+`create_worktree` whose create path moves the session's own working directory into
+`.agents/worktrees/<branch>` (so later children inherit that cwd).
+
+The package now ships a **client half** — `lib/client.js`, declared through `dsh.client`
+(`platform: web`, `immediately: true`, `inject: ["@deepseek-ai/dsh-client-ui-conversation"]`) and
+packed in `files`. It registers **one** entry in `conversation.input.dock`, the session-scoped list
+slot above the composer, and requires only `react` — no Harness client package. It reads
+`pluginManager.listBundles()` on mount, renders nothing while neither bundle is enabled, and for each
+enabled one prints the conflict, the side effect of switching it off, and a **Turn Team off** /
+**Turn Git Worktrees off** button. The click calls
+`pluginManager.setBundleEnabled(bundle, false)` and renders the Host's own `application` state
+(`applied` / `restart-required` / `overridden` / `failed` / `cancelled`) instead of assuming success;
+the list refreshes on `plugin-manager/changed`.
+
+The banner never offers re-enabling: enabling a bundle appends it to the end of the profile's bundle
+list and changes patch precedence, so that stays a deliberate act in **Plugins**. Turning Team off
+removes the bundle's `disabled: true` overrides, which is what restores the four child-control tools.
+
+Colours use only `--dsw-alias-*` tokens. This is new capability, so a minor bump is the owner's call;
+it ships as a patch under the existing number discipline until the owner decides — see `DEVLOG.md`
+§ v1.1.10.
+
 ## 1.1.9 — the routing section is now the upstream text
 
 A line-by-line comparison against upstream v1.3.2's `## Request Routing` showed the real gap was a
