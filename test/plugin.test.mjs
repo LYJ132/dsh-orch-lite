@@ -34,8 +34,21 @@ const hostHalf = await import(pathToFileURL(join(pkg, 'lib', 'host.js')).href)
 
 const subprocess = {
 	resolveExecutable: async name => name,
-	spawn({ argv, cwd, stdio, signal }) {
-		const child = execFile(argv[0], argv.slice(1), { cwd, signal, maxBuffer: 64 * 1024 * 1024 })
+	// Every spawn is recorded so the suite can assert on the hardening a call
+	// carries (argv flags and the inherited-environment scrub) instead of trusting
+	// the source text.
+	calls: [],
+	spawn({ argv, cwd, stdio, signal, env }) {
+		subprocess.calls.push({ argv, env })
+		// The platform applies `env` as an overlay on the parent environment and
+		// drops entries whose value is undefined — that "undefined means unset" is
+		// exactly what the plugin's GIT_* scrub relies on, so the stub must model it.
+		const childEnv = { ...process.env }
+		for (const [key, value] of Object.entries(env ?? {})) {
+			if (value === undefined) delete childEnv[key]
+			else childEnv[key] = value
+		}
+		const child = execFile(argv[0], argv.slice(1), { cwd, signal, env: childEnv, maxBuffer: 64 * 1024 * 1024 })
 		let out = ''
 		let err = ''
 		child.stdout?.on('data', chunk => {
@@ -76,6 +89,10 @@ const fsService = {
 		return readFileSync(target.displayPath, 'utf8')
 	},
 	writeText: async (target, content) => {
+		// The real backend creates missing parent directories
+		// (`writeFileAtomic` → `mkdir(..., { recursive: true })`), and allocating
+		// `.worktrees/.gitignore` relies on exactly that.
+		mkdirSync(join(target.displayPath, '..'), { recursive: true })
 		writeFileSync(target.displayPath, content, 'utf8')
 		return { version: String(content.length), operation: 'written' }
 	},
@@ -614,10 +631,25 @@ check('a reused area carries no bootstrap notice', created.note === '', JSON.str
 
 // --- a new feature gets a fresh area -------------------------------------------
 
+// The user's own tracked .gitignore: allocation must not touch it.
+writeFileSync(join(root, '.gitignore'), 'node_modules/\n', 'utf8')
+await git(['add', '.gitignore'])
+await git(['-c', 'user.name=t', '-c', 'user.email=t@l', 'commit', '-qm', 'chore: user gitignore'])
+const repoIgnoreBefore = readFileSync(join(root, '.gitignore'), 'utf8')
 const fresh = await callTool('create', { feature_id: 'docs' })
 check('a new feature creates its area', fresh.created === true && fresh.branch === 'feature/docs')
 check('fresh work area directory exists', existsSync(join(root, '.worktrees', 'docs', 'app.js')))
-check('.gitignore gained .worktrees/', readFileSync(join(root, '.gitignore'), 'utf8').includes('.worktrees/'))
+check(
+	'the repository .gitignore is untouched by allocation',
+	readFileSync(join(root, '.gitignore'), 'utf8') === repoIgnoreBefore,
+	readFileSync(join(root, '.gitignore'), 'utf8'),
+)
+check(
+	'the pool carries its own one-line ignore file',
+	readFileSync(join(root, '.worktrees', '.gitignore'), 'utf8') === '*\n',
+	JSON.stringify(readFileSync(join(root, '.worktrees', '.gitignore'), 'utf8')),
+)
+check('the primary tree stays clean after allocation', (await git(['status', '--porcelain'])).trim() === '', (await git(['status', '--porcelain'])).trim())
 
 // --- allocation reports what the fresh area will NOT contain --------------------
 // A new area is HEAD: the primary tree's uncommitted files are simply not in
@@ -717,7 +749,13 @@ check('the bootstrap notice reaches the model through the tool result', typeof b
 check('the notice renders ahead of the dispatch hint', registered.get('orch_tool').output.render({}, bootstrapped)[0].text.includes('Bootstrapped a git repository'))
 const bareLog = (await git(['log', '--format=%s'], bare)).trim()
 check('a baseline commit exists', bareLog.includes('chore: orch-lite baseline'), bareLog)
-check('ignored entries were written', readFileSync(join(bare, '.gitignore'), 'utf8').includes('.worktrees/'))
+const bareIgnore = readFileSync(join(bare, '.gitignore'), 'utf8')
+check('the bootstrap wrote the secret safety net to the repository .gitignore', bareIgnore.includes('.env*') && bareIgnore.includes('*.pem'), JSON.stringify(bareIgnore))
+check(
+	'the bootstrapped pool carries its own ignore file (the repository .gitignore is not used for it)',
+	readFileSync(join(bare, '.worktrees', '.gitignore'), 'utf8') === '*\n',
+)
+check('the bootstrapped tree is clean', (await git(['status', '--porcelain'], bare)).trim() === '', (await git(['status', '--porcelain'], bare)).trim())
 
 // --- a folder that already holds user files IS bootstrapped in place ---------------
 //
@@ -796,6 +834,117 @@ const bareListExec = { signal: new AbortController().signal, agent: { session: {
 await rejects('list refuses a non-repository workspace', () => registered.get('orch_tool').execute({ action: 'list', feature_id: 'x' }, bareListExec))
 await rejects('doctor refuses a non-repository workspace', () => registered.get('orch_tool').execute({ action: 'doctor', feature_id: 'x' }, bareListExec))
 check('the read-only actions created no repository', !existsSync(join(bareList, '.git')))
+
+// --- git plumbing hardening: environment, hooks, filter drivers --------------------
+//
+// The plugin runs git across a process boundary, so it carries the shipped
+// worktree service's defences: inherited GIT_* selectors are cleared, every call
+// disables repository hooks and the fsmonitor daemon, and the one call that
+// materialises a checkout blanks every repository-configured filter driver
+// instead of letting it run code.
+
+// Criterion 1's exact scrub list, pinned here so a dropped variable is caught.
+const GIT_ENV_SCRUB = [
+	'GIT_DIR',
+	'GIT_WORK_TREE',
+	'GIT_COMMON_DIR',
+	'GIT_INDEX_FILE',
+	'GIT_OBJECT_DIRECTORY',
+	'GIT_ALTERNATE_OBJECT_DIRECTORIES',
+	'GIT_CONFIG',
+	'GIT_CONFIG_PARAMETERS',
+	'GIT_CEILING_DIRECTORIES',
+	'GIT_PREFIX',
+	'GIT_SHALLOW_FILE',
+	'GIT_GRAFT_FILE',
+	'GIT_REPLACE_REF_BASE',
+	'GIT_ATTR_SOURCE',
+]
+
+{
+	const hardened = mkdtempSync(join(tmpdir(), 'orch-hardened-'))
+	// A driver whose smudge command cannot run: without neutralisation the
+	// materialising reset fails outright, so a working checkout is the proof the
+	// driver was skipped rather than obeyed. Configured after the baseline commit
+	// so the *checkout* is the only place it could ever run.
+	writeFileSync(join(hardened, 'notes.txt'), 'hello\n', 'utf8')
+	writeFileSync(join(hardened, '.gitattributes'), 'notes.txt filter=boom\n', 'utf8')
+	writeFileSync(join(hardened, '.gitignore'), 'dist/\n', 'utf8')
+	await git(['init', '-b', 'main', '-q'], hardened)
+	// Pin the checkout byte-for-byte: this suite must not depend on the machine's
+	// core.autocrlf setting to compare a materialised file with its blob.
+	await git(['config', 'core.autocrlf', 'false'], hardened)
+	await git(['add', '.'], hardened)
+	await git(['-c', 'user.name=t', '-c', 'user.email=t@l', 'commit', '-qm', 'baseline'], hardened)
+	await git(['config', 'filter.boom.smudge', 'orch-lite-no-such-filter-command'], hardened)
+	await git(['config', 'filter.boom.required', 'true'], hardened)
+	// The suite's own git calls are not the plugin's: they inherit the driver, so
+	// they neutralise it the same way when they have to look at the working tree.
+	const hardenedGit = args =>
+		git(['-c', 'filter.boom.smudge=', '-c', 'filter.boom.clean=', '-c', 'filter.boom.process=', '-c', 'filter.boom.required=false', ...args], hardened)
+	const ignoreBefore = readFileSync(join(hardened, '.gitignore'), 'utf8')
+	const hardenedExec = { signal: new AbortController().signal, agent: { session: { header: { cwd: hardened, id: 'hardened' } } } }
+
+	// An inherited GIT_DIR would retarget every call this plugin makes; the scrub
+	// has to win, or the suite's own git calls above would not be the only proof.
+	const seenBefore = subprocess.calls.length
+	let hardenedCreate
+	process.env.GIT_DIR = join(hardened, 'not-a-repository')
+	try {
+		hardenedCreate = await registered.get('orch_tool').execute({ action: 'create', feature_id: 'scratch' }, hardenedExec)
+	} finally {
+		delete process.env.GIT_DIR
+	}
+	const calls = subprocess.calls.slice(seenBefore).filter(call => call.argv[0] === 'git')
+	check('create ignores an inherited GIT_DIR', hardenedCreate?.created === true, JSON.stringify(hardenedCreate))
+	check(
+		'every git call disables repository hooks and the fsmonitor daemon',
+		calls.length > 0 && calls.every(call => call.argv.slice(1, 5).join(' ') === '-c core.hooksPath=/dev/null -c core.fsmonitor=false'),
+		JSON.stringify(calls[0]?.argv.slice(0, 6)),
+	)
+	check(
+		'every git call clears the inherited repository selectors',
+		calls.every(call => GIT_ENV_SCRUB.every(key => key in call.env && call.env[key] === undefined)),
+		JSON.stringify(GIT_ENV_SCRUB.filter(key => calls.some(call => !(key in call.env) || call.env[key] !== undefined))),
+	)
+	check(
+		'every git call runs offline and LFS-smudge-free',
+		calls.every(call => call.env.GIT_NO_LAZY_FETCH === '1' && call.env.GIT_LFS_SKIP_SMUDGE === '1' && call.env.GIT_TERMINAL_PROMPT === '0'),
+	)
+	const allocationCall = calls.find(call => call.argv.includes('worktree') && call.argv.includes('add'))
+	check('allocation creates the checkout with --no-checkout', allocationCall?.argv.includes('--no-checkout') === true, JSON.stringify(allocationCall?.argv))
+	const resetCall = calls.find(call => call.argv.includes('reset'))
+	check(
+		'the materialising call is reset --hard --no-recurse-submodules',
+		resetCall?.argv.includes('--hard') === true && resetCall.argv.includes('--no-recurse-submodules') === true,
+		JSON.stringify(resetCall?.argv),
+	)
+	const overrides = resetCall?.env ?? {}
+	const overrideKeys = Object.entries(overrides).filter(([key]) => key.startsWith('GIT_CONFIG_KEY_')).map(([, value]) => value)
+	check(
+		'the reset call blanks every attribute of the repository driver',
+		['clean', 'smudge', 'process', 'required'].every(attribute => overrideKeys.includes(`filter.boom.${attribute}`)),
+		JSON.stringify(overrideKeys),
+	)
+	const requiredIndex = Object.entries(overrides).find(([, value]) => value === 'filter.boom.required')?.[0].replace('GIT_CONFIG_KEY_', '')
+	check('the driver is pinned not-required instead of trusted', overrides[`GIT_CONFIG_VALUE_${requiredIndex}`] === 'false')
+	check(
+		'the command-line config count matches the overrides emitted',
+		Number(overrides.GIT_CONFIG_COUNT) === overrideKeys.length && overrideKeys.length > 0,
+		`${overrides.GIT_CONFIG_COUNT} vs ${overrideKeys.length}`,
+	)
+	check(
+		'every other git call still drops inherited GIT_CONFIG_KEY_n entries',
+		calls.filter(call => call !== resetCall).every(call => call.env.GIT_CONFIG_COUNT === '0'),
+	)
+	check('the materialised checkout carries the committed content unfiltered', readFileSync(join(hardened, '.worktrees', 'scratch', 'notes.txt'), 'utf8') === 'hello\n', JSON.stringify(readFileSync(join(hardened, '.worktrees', 'scratch', 'notes.txt'), 'utf8')))
+	check('the user .gitignore is untouched on the hardened path', readFileSync(join(hardened, '.gitignore'), 'utf8') === ignoreBefore, JSON.stringify(ignoreBefore))
+	check('the pool ignore file was allocated for this repository', readFileSync(join(hardened, '.worktrees', '.gitignore'), 'utf8') === '*\n')
+	check('the hardened repository stays clean', (await hardenedGit(['status', '--porcelain'])).trim() === '', (await hardenedGit(['status', '--porcelain'])).trim())
+	const hardenedTracked = (await hardenedGit(['ls-files'])).split(/\r?\n/).filter(Boolean)
+	check('a pool ignore file is never committed', !hardenedTracked.some(path => path.startsWith('.worktrees/')), JSON.stringify(hardenedTracked))
+	rmSync(hardened, { recursive: true, force: true })
+}
 
 rmSync(root, { recursive: true, force: true })
 rmSync(bare, { recursive: true, force: true })
