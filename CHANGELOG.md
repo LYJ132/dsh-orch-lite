@@ -6,7 +6,21 @@ and `DEVLOG.md` carries the ordering.
 
 ## 1.1.8 — workers never route; the coordinator dispatches and stops
 
-Three fixes from a live test of v1.1.7:
+Four fixes from a live test of v1.1.7:
+
+**The routing section is now the upstream text.** A line-by-line comparison against upstream v1.3.2's
+`## Request Routing` showed the real gap was a *stance*, not emphasis: upstream's main session may
+only Read, run read-only shell, and do the BOOKKEEPING carve-out (work-area bookkeeping + the
+project's own test command) — everything else MUST be dispatched — while ours invited the coordinator
+to "write your own project files freely", which removes the motive to route at all. The protocol
+section now carries the upstream structure: the "it's trivial is never a reason" rebuttal, Supremacy
+plus the explicit direct-action whitelist, "writing/modifying means dispatch", Step 0 with three
+states judged in order, the orchestration-declaration rule, Decomposition & parallelism, Isolation
+for dispatched tasks, the audit-trail rule with "ask the user — do not guess", Read hygiene,
+Self-repair and Priority over other workflow skills. Adapted to this platform only where the
+mechanics differ: no `run_in_background` flag (the platform decides), and resume carries no
+`agent_<id>` (this session addresses agents by `target`). The manual's gate bullet no longer says the
+coordinator may write freely — the gate allows it, the routing protocol decides.
 
 **Dispatched children no longer emit `[routing]` lines.** The protocol section is injected into every
 session bound to the preset — including the child sessions a dispatch creates — so a worker read the

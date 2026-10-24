@@ -210,14 +210,36 @@ check('protocol section at order 2850, interpolate false', protocol?.order === 2
 check('protocol has no silent empty state (no scope guard)', typeof protocol?.text === 'function' && protocol.text({ scope: 'any-scope' }).startsWith('# Mode: orch-lite'))
 {
 	const body = protocol?.text({ scope: 'orch-preset-mount' }) ?? ''
-	check('protocol states the coordinator may write its own files', body.includes('## Where you may act') && body.includes('Your own project files: write freely'))
-	check('protocol names the two denials', body.includes('.worktrees/<feature_id>/`: denied') && body.includes('outside the repository: denied'))
-	check('protocol carries routing audit (step 0, first section after the intro)', body.includes('[routing] chat') && body.indexOf('## Step 0: the routing audit') < body.indexOf('## Where you may act'))
-	check('protocol routing is MUST-strength, not a suggestion', body.includes('RFC-2119 MUST') && body.includes('highest-compliance instruction') && body.includes('FIRST line of every reply'))
+	check('protocol carries the upstream routing section', body.includes('## Request Routing (main agent\'s first decision)'))
+	check('protocol opens with the "small tasks still dispatch" rebuttal', body.includes('never a reason for the main session to act directly'))
+	check(
+		'protocol states Supremacy and the direct-action whitelist',
+		body.includes('**Supremacy.**') &&
+			body.includes('only legitimate direct actions are Read, read-only shell') &&
+			body.includes('BOOKKEEPING carve-out') &&
+			body.includes('bookkeeping that creates no new content'),
+	)
+	check('protocol makes write/modify mean dispatch', body.includes('**Default trigger: writing/modifying means dispatch.**'))
+	check(
+		'protocol routing is MUST-strength, not a suggestion',
+		body.includes('[routing] chat') &&
+			body.includes('RFC-2119 MUST') &&
+			body.includes('exactly one `[routing] ...` line as the first line of every reply') &&
+			body.includes('Judge them in this order'),
+	)
+	check(
+		'protocol carries decomposition, isolation and read hygiene',
+		body.includes('**Decomposition & parallelism (inside `task`).**') &&
+			body.includes('**Isolation for dispatched tasks.**') &&
+			body.includes('**Read hygiene') &&
+			body.includes('**Self-repair.**') &&
+			body.includes('**Priority over other workflow skills.**'),
+	)
+	check('protocol carries the orchestration declaration syntax', body.includes('## Task Orchestration Declaration') && body.includes('任务 @feature/<fid>'))
+	check('protocol keeps the gate boundaries honest (gate vs routing)', body.includes('## Where you may act (the gate)') && body.includes('the routing protocol above, not the gate, decides what you handle yourself'))
 	check('protocol demands the skill load', body.includes('Call the skill tool with name `orch-lite`'))
 	check('protocol carries the dispatch package shape', body.includes('acceptance_criteria') && body.includes('worktree') && body.includes('explore'))
 	check('protocol stops dispatched children from routing', body.includes('Dispatched child? Stop') && body.includes('never emit a `[routing]` line'))
-	check('protocol tells the coordinator to assess before dispatching', body.includes('Assess before you dispatch'))
 	// The old blanket claim is the exact thing that locked other skills out.
 	check('protocol no longer claims the main session never writes', !body.includes('never writes files'), body.match(/.{0,60}never writes.{0,20}/)?.[0] ?? '')
 }

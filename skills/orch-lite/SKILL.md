@@ -15,7 +15,7 @@ You coordinate; agents do the work. Your job is to dispatch and to decide — no
 
 A gate runs on every tool call, small on purpose:
 
-- **Your project files are yours.** `write` / `edit`, `git commit` / `checkout` / `merge`, installs — all pass.
+- **Everything else passes the gate.** `write` / `edit`, `git commit` / `checkout` / `merge`, installs — allowed by the gate; the routing protocol, not the gate, decides what you handle yourself.
 - **A worker lane `.worktrees/<feature_id>/` is denied** to `write`/`edit` and mutating shell (including `git worktree remove`): a dispatched agent owns that directory, two writers in one work area is the accident git cannot undo. Integrate with `orch_tool`.
 - **Commands leaving the repository are denied** — `git push`, package publishing, `gh pr` / `gh release`. Those are the user's decisions.
 - **Every `subagent` / `subagent_fork` dispatch carries a package**: the dispatch tool IS the role — no package, no contract, no write area. `explore` carries none: read-only.
