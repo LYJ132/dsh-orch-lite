@@ -442,6 +442,65 @@ check('no registration warnings', warnings.length === 0, warnings.join(' | '))
 	check('gate passes the integration tool', mergeTool.nextCalled)
 }
 
+// --- gate: git writes into a worker lane (the `write` rule, through the shell) -----
+
+{
+	const denyLaneGit = async (label, command) => {
+		const r = await gate({ agent: MAIN, name: 'pwsh', arguments: { command } })
+		check(`gate denies ${label} aimed at a worker lane`, r.decision?.kind === 'deny' && r.decision.reason.includes('worker lane'), r.decision?.reason)
+	}
+	await denyLaneGit('git add', 'git add .worktrees/login/app.js')
+	await denyLaneGit('git commit', 'git commit -qm "wip" -- .worktrees/login/app.js')
+	await denyLaneGit('git checkout', 'git checkout -- .worktrees/login/app.js')
+	await denyLaneGit('git reset', 'git reset --hard .worktrees/login')
+	await denyLaneGit('git stash', 'git stash push -- .worktrees/login')
+	await denyLaneGit('git restore', 'git restore .worktrees/login/app.js')
+	// Naming no lane path at all, but running from inside one: the same write.
+	await denyLaneGit('git -C into the lane', 'git -C .worktrees/login add .')
+	await denyLaneGit('an absolute lane path', `git add ${join(root, '.worktrees', 'login', 'app.js')}`)
+	// The same verbs against the coordinator's own project files stay allowed —
+	// they were allowed before this rule and the rule must not narrow them.
+	for (const [label, command] of [
+		['git add a project file', 'git add src/app.ts'],
+		['git commit', 'git commit -qm "fix: thing"'],
+		['git checkout a project file', 'git checkout -- README.md'],
+		['git reset', 'git reset --soft HEAD~1'],
+		['git stash', 'git stash push -m checkpoint'],
+		['git restore a project file', 'git restore README.md'],
+		['git stash list', 'git stash list'],
+	]) {
+		const r = await gate({ agent: MAIN, name: 'pwsh', arguments: { command } })
+		check(`in-project git still passes (${label})`, r.nextCalled, r.decision?.reason)
+	}
+	const readLane = await gate({ agent: MAIN, name: 'pwsh', arguments: { command: 'git status --short .worktrees/login' } })
+	check('a read-only git command naming the lane passes', readLane.nextCalled, readLane.decision?.reason)
+}
+
+// --- gate: the Team-only wait_agent -----------------------------------------------
+
+{
+	const mainWait = await gate({ agent: MAIN, name: 'wait_agent', arguments: { target: 'login' } })
+	check(
+		'the coordinator is denied the Team-only wait_agent',
+		mainWait.decision?.kind === 'deny',
+		mainWait.decision?.reason,
+	)
+	const reason = mainWait.decision?.reason ?? ''
+	check('the wait_agent denial names the Team-only semantics', reason.includes('Team-composition tool') && reason.includes('Team members'), reason)
+	check('the wait_agent denial names the disjoint population', reason.includes('disjoint population'), reason)
+	check('the wait_agent denial names the settlement notice as the real signal', reason.includes('subagent-settled'), reason)
+	const leadWait = await gate({ agent: LEAD, name: 'wait_agent', arguments: {} })
+	check('a Team lead with delegationDepth 0 is a coordinator, so it is denied too', leadWait.decision?.kind === 'deny', leadWait.decision?.reason)
+	const childWait = await gate({ agent: CHILD, name: 'wait_agent', arguments: {} })
+	check('a dispatched worker calling wait_agent is not blocked by this gate', childWait.nextCalled, childWait.decision?.reason)
+	const foreignWait = await gate({ agent: { session: { header: { id: 'f2', cwd: root, agentPreset: 'standard' } } }, name: 'wait_agent', arguments: {} })
+	check('a non-orch-lite session keeps its wait_agent', foreignWait.nextCalled, foreignWait.decision?.reason)
+	// The answer does not depend on a working tree: denied before the repository probe.
+	const noRepo = { session: { header: { id: 'no-repo-wait', cwd: join(tmpdir(), 'orch-definitely-not-a-repo'), agentPreset: 'orch-lite', delegationDepth: 0 } } }
+	const noRepoWait = await gate({ agent: noRepo, name: 'wait_agent', arguments: {} })
+	check('the wait_agent denial does not need a repository', noRepoWait.decision?.kind === 'deny', noRepoWait.decision?.reason)
+}
+
 // --- gate: dispatch is opt-in ----------------------------------------------------
 
 {
