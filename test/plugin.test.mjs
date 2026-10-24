@@ -1159,6 +1159,11 @@ await rejects('create refuses a feature depending on itself', () => callTool('cr
 		String(unmerged.decision?.reason).includes('git merge-base --is-ancestor feature/docs feature/loner'),
 		unmerged.decision?.reason,
 	)
+	check(
+		'the unmerged refusal gives the recovery that actually works (a cut is not re-cut)',
+		String(unmerged.decision?.reason).includes('is not re-cut by create'),
+		unmerged.decision?.reason,
+	)
 	// refuse: the dependency branch does not exist at all
 	const absent = await gate({
 		agent: MAIN,
