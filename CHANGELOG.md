@@ -4,9 +4,10 @@ All notable changes to this bundle. Rationale for each decision lives in `DEVLOG
 the short form. Dates are omitted on purpose — the project is developed in a single continuous line
 and `DEVLOG.md` carries the ordering.
 
-## 1.1.10 — the gate stops trusting two answers from the wrong population
+## 1.1.10 — the gate stops trusting the wrong population, and the bundle names both silent conflicts
 
-Two holes found in a live orchestrating session.
+Four changes from a live orchestrating session: three holes it exposed, one hardening of this
+bundle's own git plumbing, and the browser half that names the two silent profile conflicts.
 
 **`wait_agent` is denied to coordinators.** The desktop profile mounts the Agent Team bundle, whose
 patch shadows the subagent roster with its own and adds `wait_agent`. That tool waits on **Team
@@ -24,12 +25,51 @@ same write by another route: a lane belongs to its feature agent, which commits 
 the coordinator integrates with `orch_tool`. The same verbs against project files still pass, as do
 read-only forms (`git stash list`, `git status <lane>`).
 
+**`create_worktree` is denied to coordinators.** The Git Worktrees bundle puts a create-only tool in
+the same catalog as `orch_tool`, and its create path ends by moving the session's own working
+directory into `.agents/worktrees/<branch>`. A dispatched child inherits that directory, so one call
+would re-root the whole orchestration and every later `orch_tool` action would resolve the repository
+from the new checkout. The denial names the bundle, the relocating behaviour, and the preset's own
+route (`orch_tool create` allocates without moving the session and hands back the absolute path for
+`subagent({ cwd })`).
+
+**The bundle's own git plumbing is hardened to the level of the shipped worktree service.** Every git
+invocation now scrubs the inherited `GIT_*` selector list and runs with hooks and fsmonitor disabled;
+work-area allocation uses `worktree add --no-checkout` followed by a `reset --hard` whose
+`GIT_CONFIG_KEY_n` overrides blank every repository-configured filter driver for that one call; and
+the `.worktrees` pool carries its own one-line `*` ignore file instead of editing the repository's
+tracked `.gitignore` (the bootstrap still writes the secret safety net there, because it has to be in
+the baseline commit).
+
 Three smaller corrections fell out of writing the tests: `git stash push` no longer reads as
 `git push` (it is a local stash); the lane path test now accepts a backslash prefix, so the natural
 spelling of a Windows lane (`D:\repo\.worktrees\<fid>`) reaches the lane rules instead of slipping
 past them; and a quoted commit message is treated as prose, so a commit that *documents* the lane
 (`git commit -qm "explain the .worktrees layout"`) is not a commit *into* it — while a path argument
 beside the message (`... -m "wip" -- .worktrees/<fid>/x`) is still denied.
+
+The package now also ships a **client half** — `lib/client.js`, declared through `dsh.client`
+(`platform: web`, `immediately: true`, `inject: ["@deepseek-ai/dsh-client-ui-conversation"]`) and
+packed in `files`. The Node half cannot see either profile conflict, so the browser names them: the
+Agent Team layer disables `tool-subagent-control`, `tool-subagent-list-agents`, `tool-subagent` and
+`tool-subagent-fork` (a running child reads as idle, continuation impossible), and the Git Worktrees
+bundle supplies the relocating `create_worktree`. It is attached to the global Loader row, which now
+uses the **bare** package specifier `dsh-orch-lite`: `dsh-client-modules` serves a `dsh.client` bundle
+only for a row whose specifier is the bare package name, and preset rows live in a separate tree it
+never scans. The preset-scoped enforcement therefore mounts from the `dsh-orch-lite/preset` subpath;
+the patch still carries two rows and the `orch-lite-host` row id is unchanged. The browser half
+registers **one** entry in the session-scoped `conversation.input.dock` list slot — the strip above
+the composer — and reads `pluginManager.listBundles()` on mount. It renders nothing while neither
+bundle is enabled, and for each enabled one prints the conflict, the side effect of switching it off,
+and a **Turn Team off** / **Turn Git Worktrees off** button. The click calls
+`pluginManager.setBundleEnabled(bundle, false)` and renders the Host's own `application` state
+(`applied` / `restart-required` / `overridden` / `failed` / `cancelled`) instead of assuming success;
+the list refreshes on `plugin-manager/changed`. It requires only `react` — no Harness client package.
+
+The banner never offers re-enabling: enabling a bundle appends it to the end of the profile's bundle
+list and changes patch precedence, so that stays a deliberate act in **Plugins**. Turning Team off
+removes the bundle's `disabled: true` overrides, which is what restores the four child-control tools.
+Colours use only `--dsw-alias-*` tokens.
 
 ## 1.1.9 — the routing section is now the upstream text
 

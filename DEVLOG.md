@@ -84,6 +84,59 @@ number was raised without the owner deciding it. The release was re-cut as **v1.
 commit, and the v1.2.0 tag was withdrawn. The content did not change — only the number it shipped
 under, which is exactly the part that was not the agent's to choose.
 
+## v1.1.10 — a client half for the two silent profile conflicts
+
+**The problem the Node half cannot see.** When the desktop profile also mounts
+`@deepseek-ai/dsh-experimental-agent-team-profile` and
+`@deepseek-ai/dsh-experimental-tool-worktree`, this preset's guarantees quietly stop holding: the
+Team layer disables the four child-control tools (a running dispatched child reads as idle and cannot
+be continued), and the Worktrees bundle adds a create-only `create_worktree` whose create path moves
+the session's own working directory into `.agents/worktrees/<branch>`, so later children inherit a
+cwd nobody intended. Both are profile composition facts. A host plugin can read a session, not the
+profile's bundle selection, so the honest place to say it is the page — and the profile's own
+`pluginManager` remote is the only supported way to change that selection (`plugin-manager` is a
+shipped skill and forbids hand-editing `package.json` / `cordis.patch.yml`; the `plugin_manager`
+*tool* row is disabled in this preset).
+
+**Why a persistent banner instead of an automatic fix.** Disabling a bundle changes patch
+precedence, and enabling one appends it to the end of the profile's bundle list, so the reverse move
+cannot preserve the original order. Auto-fixing would therefore make the profile's state depend on
+which page was open. The banner states the conflict, offers one explicit action per bundle, and
+shows the Host's own application state (`applied` / `restart-required` / `overridden` / `failed` /
+`cancelled`) — never "it worked".
+
+**The seam.** `dsh.client` in `package.json` (`platform: 'web'`, `immediately: true`,
+`inject: ['@deepseek-ai/dsh-client-ui-conversation']`) plus `lib/client.js`, a
+`window.__ModuleLoader__.load({ id: 'dsh-orch-lite', factory })` bundle returning
+`{ inject, apply }`. `apply` registers exactly one entry:
+`ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({ name, id, order, inject }, ConflictGuard))`.
+`conversation.input.dock` is the session-scoped list slot above the composer, so it reads as a
+session-start banner and disappears entirely when nothing is enabled. The browser half requires only
+`react` — mounting it must never add a `@deepseek-ai/dsh-client-ui-*` dependency to this package.
+
+**Which Loader row the browser half attaches to (the constraint that moved a row).**
+`dsh-client-modules` scans `ctx.loader.entries()` — the root composition — and resolves a row's
+package only when `exactPackageSpecifier(row.options.name)` returns a name, which it does only for
+the **bare** package specifier; `dsh-orch-lite/preset` and `dsh-orch-lite/host` are subpaths and are
+skipped. Preset rows are worse off: `agent-preset-registry` mounts them into a `PresetTree` that
+deliberately detaches itself from `owner.subtree`, so a preset's `orch` row is never in
+`loader.entries()` at all. A `dsh.client` declaration on a preset-only row would therefore be
+served to nobody — the feature would look correct and never appear. The fix is structural and
+deliberately small: the **global host row now uses the bare specifier `dsh-orch-lite`** (its row id
+and behaviour are unchanged — that is the row the browser half attaches to), and the enforcement
+mounts from the new `dsh-orch-lite/preset` subpath via the preset's `orch` row. `package.json`
+exports `"."` and `"./host"` to `lib/host.js` and `"./preset"` to `lib/index.js`; the bundle patch
+keeps exactly two rows, so `orch-lite-host` overrides in a user's own patch still target the same
+row id.
+
+**Two shape facts worth writing down.** The remote namespaces answer `{ ok, value }` / `{ ok: false,
+error }`, not the bare value, so the banner unwraps (and tolerates the bare value). The Host result
+field is `application`, not `status`; `overridden` means a higher-priority profile layer still wins,
+and `restart-required` carries `restartReason`.
+
+**Why a patch bump.** The change is new capability, which normally means a minor bump — the owner's
+call, not the agent's. Shipped as 1.1.10 under the existing discipline; the owner may recut as 1.2.0.
+
 ## v1.1.3 — the routing audit is the decision, not the topology
 
 § v1.1.2 left "collapse the five routing states to three" unfixed on the grounds that our fifth
@@ -1028,6 +1081,18 @@ Deliberate DSH-specific deviations from the original:
   mount audit, taking the standard tools with it.
 - Skill registration warnings are non-fatal but leave the catalog entry
   absent — check host logs for `orch-lite: skill ... could not be registered`.
+- Profile-conflict banner absent (v1.1.10+): the running profile still holds
+  the **old copy** of the package (the profile installs a copy, not a link);
+  the page was not reloaded after the restart that served the new bundle; the
+  pack dropped `lib/client.js`; `exports["./client"]` or `dsh.client` is
+  malformed (the boot audit names the package and the reason); or the release
+  does not declare the `conversation.input.dock` slot, whose registration then
+  simply waits. The banner is INVISIBLE by design when `listBundles` succeeds
+  and neither bundle is enabled — check the profile bundle list before assuming
+  a load failure.
+- Banner visible but a click says `failed`: the rendered line carries the
+  Host's own `error` text (`message` / `diagnostic` / `code`); a `restart-required`
+  line means the selection was saved and waits for a restart.
 
 ## Test harness
 
@@ -1041,6 +1106,14 @@ denied, external-effect shell denied, lane reads and in-repo git allowed, opt-in
 package validation including the "not our dispatch" pass-through, workers not
 routed at all, unknown agents failing open — plus the worker hint, skill
 registration and the host row, the packaging invariants, and freshness guards.
+The browser half is driven through the seam it actually uses: a captured
+`window.__ModuleLoader__` for registration and a minimal React runtime
+(`createElement` / `useState` / `useEffect`) for the banner. The checks cover the
+`dsh.client` declaration and pack entry, the exactly-one-slot registration, the
+`react`-only require, the mount read, both conflict rows and their copy, the
+click action and each application state (`applied`, `restart-required`,
+`overridden`, `failed`, and a refused answer), the unmount unsubscribe, and the
+alias-only colour tokens.
 The guards are what keep the slimming from rotting: no shipped file may still
 name a retired mechanism (`worktree_create`, `audit.log`, `EXECUTOR_DENIED_TOOLS`,
 `solo lane`, "never writes files"), nothing may import the retired audit module,
