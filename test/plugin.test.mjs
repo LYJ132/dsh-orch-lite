@@ -237,6 +237,15 @@ check('protocol has no silent empty state (no scope guard)', typeof protocol?.te
 	)
 	check('protocol carries the orchestration declaration syntax', body.includes('## Task Orchestration Declaration') && body.includes('任务 @feature/<fid>'))
 	check('protocol keeps the gate boundaries honest (gate vs routing)', body.includes('## Where you may act (the gate)') && body.includes('the routing protocol above, not the gate, decides what you handle yourself'))
+	// The gate denies three things now; the always-visible protocol must say so,
+	// or a coordinator meets the denial with no idea it exists.
+	check(
+		'protocol names all three gate denials (lane git writes, external effects, wait_agent)',
+		body.includes('denies three things') &&
+			body.includes('`stash`') &&
+			body.includes('Team-only `wait_agent`') &&
+			body.includes('settlement notice'),
+	)
 	check('protocol demands the skill load', body.includes('Call the skill tool with name `orch-lite`'))
 	check('protocol carries the dispatch package shape', body.includes('acceptance_criteria') && body.includes('worktree') && body.includes('explore'))
 	check('protocol stops dispatched children from routing', body.includes('Dispatched child? Stop') && body.includes('never emit a `[routing]` line'))
@@ -288,6 +297,8 @@ check('both skills registered', skills.has('orch-lite') && skills.has('orch-lite
 	const manual = read('skills/orch-lite/SKILL.md')
 	const handbook = read('skills/orch-lite-executor/SKILL.md')
 	check('the coordinator manual stays under the pruner threshold', manual.length < 8192, String(manual.length))
+	check('the manual names the wait_agent denial and the settlement notice', manual.includes('Team-only `wait_agent`') && manual.includes('settlement notice'))
+	check('the manual names lane git writes among the lane denials', manual.includes('`stash`'))
 	check('the manual stops dispatched children at the top', manual.includes('<SUBAGENT-STOP>Dispatched child? Stop'))
 	check('the manual ends the dispatch sequence with End the turn (upstream form)', manual.includes('4. **End the turn.**'))
 	check('the handbook stays under the pruner threshold', handbook.length < 8192, String(handbook.length))

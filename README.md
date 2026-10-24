@@ -8,7 +8,8 @@ and imports nothing from the platform.
 
 | Guarantee | Mechanism |
 |---|---|
-| A worker's work area stays its own | a `tools/pre-execute` gate denies main-session `write` / `edit` and lane-destroying shell (including `git worktree remove`) inside `.worktrees/<feature_id>/` of the **repository root** — two writers in one area is the accident git cannot undo |
+| A worker's work area stays its own | a `tools/pre-execute` gate denies main-session `write` / `edit`, lane-destroying shell (including `git worktree remove`) and git's write verbs (`add` / `commit` / `checkout` / `reset` / `stash` / `restore`) aimed at `.worktrees/<feature_id>/` of the **repository root** — two writers in one area is the accident git cannot undo |
+| A busy child is never mistaken for idle | the Team-only `wait_agent` is denied to coordinators: it waits on Team members, and the `subagent` children this preset dispatches are invisible to that roster, so its "no active peer" answer describes a different population; the denial names the asynchronous `subagent-settled` notice as the real signal |
 | Nothing leaves the repository unasked | `git push`, package publishing and `gh pr` / `gh release` are denied; those are the user's decisions |
 | Every write task owns a work area | `orch_tool({ action: "create", feature_id })` before the dispatch; the package's `worktree` must be that feature's own area — `"."`, a sibling lane and paths outside the repository are refused — and the dispatch carries it as the child's `cwd`, so the worker starts inside it |
 | Feature dispatches carry a real contract | package validation — fenced JSON, `feature_id` / `objective` / `acceptance_criteria` / `worktree`, handbook pointer — applied to a dispatch that carries such a package; prose that merely mentions `feature_id` passes |
@@ -25,7 +26,7 @@ it locked out every other skill with its own "write this file" convention, and i
 work (`pnpm install`, `git checkout`) that a `git` command or a sentence reverses. Since v1.1:
 
 - **the main session writes its own project files freely** — `write`, `edit`, commits, branch work,
-  installs; only the two rows above stop it;
+  installs; only the guarantees above stop it;
 - **no depth ban on workers** — the Host's `subagent.maxDepth` setting (default `1`, user-tunable)
   already rejects a child's delegation attempt, and a plugin cannot know better than the operator;
 - **no concurrency bookkeeping** — no live-worker registry, no pending slots, no ack parsing: with every
@@ -79,7 +80,8 @@ Two platform behaviours matter here:
 4. Ask for a write task worth backgrounding: `[routing] task <fid>` → `orch_tool create` → a dispatch
    whose package carries `"worktree"`. A package without it is refused with an actionable reason.
 5. Ask it to write a file **inside** `.worktrees/<fid>/`: denied, with the worker-lane reason.
-   Same for `rm -rf .worktrees/<fid>` and for `git push`.
+   Same for `rm -rf .worktrees/<fid>`, for `git add` / `commit` / `checkout` / `reset` / `stash` /
+   `restore` aimed at a lane, and for `git push`.
 6. Run another skill's own subagent dispatch (no `feature_id` in its prompt): it passes untouched —
    the package contract is opt-in.
 7. A feature agent's report arrives as its closing message; integration is
@@ -94,6 +96,8 @@ Two platform behaviours matter here:
 11. Call `orch_tool({ action: "list" })` and `orch_tool({ action: "doctor" })`: both are read-only, both
     report the work areas without touching the repository, and `doctor` names the dirty, stale and
     bypassed cases. Neither needs a `feature_id`.
+12. Call `wait_agent` (Team composition): denied for the coordinator, with the Team-only semantics and
+    the `subagent-settled` notice named; a dispatched worker calling it is not blocked by this gate.
 
 ## Layout
 

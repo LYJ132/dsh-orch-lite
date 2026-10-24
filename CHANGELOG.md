@@ -4,6 +4,31 @@ All notable changes to this bundle. Rationale for each decision lives in `DEVLOG
 the short form. Dates are omitted on purpose — the project is developed in a single continuous line
 and `DEVLOG.md` carries the ordering.
 
+## 1.1.10 — the gate stops trusting two answers from the wrong population
+
+Two holes found in a live orchestrating session.
+
+**`wait_agent` is denied to coordinators.** The desktop profile mounts the Agent Team bundle, whose
+patch shadows the subagent roster with its own and adds `wait_agent`. That tool waits on **Team
+members**; the children this preset dispatches are ordinary `subagent` / `subagent_fork` sessions,
+invisible to it. Its "no active peer" / "noProgress" answer is therefore true and useless at once — a
+child that is still working reads as idle, and the coordinator concludes there is nothing to wait for
+and re-dispatches. The denial names the Team-only semantics and the real signal: the platform's
+asynchronous `subagent-settled` notice. Dispatched workers are untouched (they are not routed at
+all), and so are sessions outside the preset.
+
+**A worker lane can no longer be committed through the shell.** The lane rule covered `write` /
+`edit` and lane-destroying shell, but `git add`, `commit`, `checkout`, `reset`, `stash` and
+`restore` aimed at `.worktrees/<feature_id>/` were ordinary in-repo work and passed. They are the
+same write by another route: a lane belongs to its feature agent, which commits incrementally, and
+the coordinator integrates with `orch_tool`. The same verbs against project files still pass, as do
+read-only forms (`git stash list`, `git status <lane>`).
+
+Two smaller corrections fell out of writing the tests: `git stash push` no longer reads as
+`git push` (it is a local stash), and the lane path test now accepts a backslash prefix, so the
+natural spelling of a Windows lane (`D:\repo\.worktrees\<fid>`) reaches the lane rules instead of
+slipping past them.
+
 ## 1.1.9 — the routing section is now the upstream text
 
 A line-by-line comparison against upstream v1.3.2's `## Request Routing` showed the real gap was a

@@ -15,9 +15,10 @@ You coordinate; agents do the work. Your job is to dispatch and to decide — no
 
 A gate runs on every tool call, small on purpose:
 
-- **Everything else passes the gate.** `write` / `edit`, `git commit` / `checkout` / `merge`, installs — allowed by the gate; the routing protocol, not the gate, decides what you handle yourself.
-- **A worker lane `.worktrees/<feature_id>/` is denied** to `write`/`edit` and mutating shell (including `git worktree remove`): a dispatched agent owns that directory, two writers in one work area is the accident git cannot undo. Integrate with `orch_tool`.
+- **Everything else passes the gate.** `write` / `edit`, `git commit` / `checkout` / `merge`, installs — allowed on your own project files; the routing protocol, not the gate, decides what you handle yourself.
+- **A worker lane `.worktrees/<feature_id>/` is denied** to `write`/`edit`, mutating shell (including `git worktree remove`) and git's write verbs (`add`/`commit`/`checkout`/`reset`/`stash`/`restore`) aimed at it: a dispatched agent owns that directory, two writers in one work area is the accident git cannot undo. Integrate with `orch_tool`.
 - **Commands leaving the repository are denied** — `git push`, package publishing, `gh pr` / `gh release`. Those are the user's decisions.
+- **The Team-only `wait_agent` is denied.** It waits on Team members, and this session has no Team: its "no active peer" answer describes a different population, while the child you dispatched sends an asynchronous settlement notice. Dispatch, then keep working — never wait.
 - **Every `subagent` / `subagent_fork` dispatch carries a package**: the dispatch tool IS the role — no package, no contract, no write area. `explore` carries none: read-only.
 
 A rejection is the design working: stop, emit your `[routing]` line, route. Never retry around it.
