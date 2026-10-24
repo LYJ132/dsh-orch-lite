@@ -4,6 +4,45 @@ All notable changes to this bundle. Rationale for each decision lives in `DEVLOG
 the short form. Dates are omitted on purpose — the project is developed in a single continuous line
 and `DEVLOG.md` carries the ordering.
 
+## 1.1.8 — workers never route; the coordinator dispatches and stops
+
+Three fixes from a live test of v1.1.7:
+
+**Dispatched children no longer emit `[routing]` lines.** The protocol section is injected into every
+session bound to the preset — including the child sessions a dispatch creates — so a worker read the
+coordinator's "MUST output `[routing]` first" rule and complied. Both the protocol section and the
+manual now open with an explicit stop: a dispatched child ignores the coordinator contract, its
+handbook is `orch-lite-executor`, and it never emits a `[routing]` line (the protocol guard is
+text-level; the manual carries the upstream-style `<SUBAGENT-STOP>` marker).
+
+**Assess before dispatching.** A search or narrow read with a known path, ~≤3 files and one specific
+fact is `chat` and never gets a work area; the text now says so outright, and adds the test: if you
+cannot say in one sentence why this needs an agent rather than a direct read, it is chat.
+
+**After a dispatch: end the turn.** The package is composed and the agent is running; its report
+arrives as its own message. The coordinator does not read the files the agent is working on, does
+not run the tests the agent will run, and does not review its output — a dispatched task is not a
+preview of the coordinator's own work. Dispatch, then stop.
+
+## 1.1.7 — routing protocol upgraded to decision-flow quality
+
+The routing protocol was rewritten from a state list into a decision flow, matching the six quality
+items identified in a review against upstream v1.3.2:
+
+1. **Decision questions, not state labels** — each state is now a question the model must answer
+   ("Is this pure conversation or a narrow read?"), not a label to paste.
+2. **Otherwise-fallback logic** — task is introduced with "Otherwise:", making the exclusion chain
+   explicit (chat and resume both fail → task).
+3. **Distinct from task** — the resume state explicitly states it is distinct from task (a first
+   dispatch).
+4. **Read-footprint threshold** — narrow reads carry ~≤3 files.
+5. **Ask the user, do not guess** — added "Unsure which state applies? Ask the user — do not guess."
+6. **Supremacy expanded** — the protocol states it outranks habits, other skills, and the main
+   agent's own convenience heuristics; nothing downstream may waive it.
+
+Applied to both the always-visible protocol section and the manual. The manual was re-balanced within
+its compaction budget to absorb the new text.
+
 ## 1.1.6 — bootstrap baseline commits all existing files
 
 **Bug fix.** The v1.1.5 baseline commit staged only `.gitignore`, so a worktree checked out from HEAD

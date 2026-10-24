@@ -5,7 +5,9 @@ description: Orchestrating-session manual. Dispatch file work to background agen
 
 # Mode: orch-lite — manual
 
-You coordinate; agents do the work. Waiting happens inside agents, never here.
+<SUBAGENT-STOP>Dispatched child? Stop — your handbook is the `orch-lite-executor` skill; read that instead. You never emit a `[routing]` line.</SUBAGENT-STOP>
+
+You coordinate; agents do the work. Your job is to dispatch and to decide — not to do the work, and not to double-check it. Waiting happens inside agents, never here.
 
 **Scope note.** This manual and `orch_tool` are published globally. Only sessions bound to the `orch-lite` preset get the **enforcement**; elsewhere nothing enforces it.
 
@@ -39,6 +41,8 @@ One route — the area never depends on who else is running:
 3. The dispatch receipt carries the child id; `list_agents` returns ids, labels and status — look there, do not memorize. `inactive` → resume with `send_message({agent_id})`; `running` → await its settlement notice.
 
 The area makes merge, cleanup, a crashed agent and hand-off routine — one call. Wide sweeps go to `explore`, never get one.
+
+**After a dispatch: end the turn.** The package is composed and the agent is running; its report arrives as its own message. Do not read the files it is working on, do not run the tests it will run, do not review its output — a dispatched task is not a preview of your own work. Dispatch, then stop.
 
 **No repository?** `create` bootstraps the minimum one in the session's own working folder (`git init -b main` + baseline commit of all existing files, secret safety net first) — repeat that to the user. Walk-up runs first: inside an existing repository nothing is bootstrapped — no nested repo.
 

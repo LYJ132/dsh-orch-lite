@@ -216,6 +216,8 @@ check('protocol has no silent empty state (no scope guard)', typeof protocol?.te
 	check('protocol routing is MUST-strength, not a suggestion', body.includes('RFC-2119 MUST') && body.includes('highest-compliance instruction') && body.includes('FIRST line of every reply'))
 	check('protocol demands the skill load', body.includes('Call the skill tool with name `orch-lite`'))
 	check('protocol carries the dispatch package shape', body.includes('acceptance_criteria') && body.includes('worktree') && body.includes('explore'))
+	check('protocol stops dispatched children from routing', body.includes('Dispatched child? Stop') && body.includes('never emit a `[routing]` line'))
+	check('protocol tells the coordinator to end the turn after dispatch', body.includes('## After a dispatch: end the turn') && body.includes('Dispatch, then stop'))
 	// The old blanket claim is the exact thing that locked other skills out.
 	check('protocol no longer claims the main session never writes', !body.includes('never writes files'), body.match(/.{0,60}never writes.{0,20}/)?.[0] ?? '')
 }
@@ -264,6 +266,8 @@ check('both skills registered', skills.has('orch-lite') && skills.has('orch-lite
 	const manual = read('skills/orch-lite/SKILL.md')
 	const handbook = read('skills/orch-lite-executor/SKILL.md')
 	check('the coordinator manual stays under the pruner threshold', manual.length < 8192, String(manual.length))
+	check('the manual stops dispatched children at the top', manual.includes('<SUBAGENT-STOP>Dispatched child? Stop'))
+	check('the manual tells the coordinator to end the turn after dispatch', manual.includes('**After a dispatch: end the turn.**'))
 	check('the handbook stays under the pruner threshold', handbook.length < 8192, String(handbook.length))
 	check(
 		'both manuals state where enforcement exists (scope note)',
