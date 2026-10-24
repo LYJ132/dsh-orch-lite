@@ -24,10 +24,12 @@ same write by another route: a lane belongs to its feature agent, which commits 
 the coordinator integrates with `orch_tool`. The same verbs against project files still pass, as do
 read-only forms (`git stash list`, `git status <lane>`).
 
-Two smaller corrections fell out of writing the tests: `git stash push` no longer reads as
-`git push` (it is a local stash), and the lane path test now accepts a backslash prefix, so the
-natural spelling of a Windows lane (`D:\repo\.worktrees\<fid>`) reaches the lane rules instead of
-slipping past them.
+Three smaller corrections fell out of writing the tests: `git stash push` no longer reads as
+`git push` (it is a local stash); the lane path test now accepts a backslash prefix, so the natural
+spelling of a Windows lane (`D:\repo\.worktrees\<fid>`) reaches the lane rules instead of slipping
+past them; and a quoted commit message is treated as prose, so a commit that *documents* the lane
+(`git commit -qm "explain the .worktrees layout"`) is not a commit *into* it — while a path argument
+beside the message (`... -m "wip" -- .worktrees/<fid>/x`) is still denied.
 
 ## 1.1.9 — the routing section is now the upstream text
 

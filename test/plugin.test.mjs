@@ -485,6 +485,12 @@ check('no registration warnings', warnings.length === 0, warnings.join(' | '))
 	}
 	const readLane = await gate({ agent: MAIN, name: 'pwsh', arguments: { command: 'git status --short .worktrees/login' } })
 	check('a read-only git command naming the lane passes', readLane.nextCalled, readLane.decision?.reason)
+	// A commit message is prose, not a path: documenting the lane layout is
+	// ordinary work, and this project's own commits talk about `.worktrees`.
+	const messageOnly = await gate({ agent: MAIN, name: 'pwsh', arguments: { command: 'git commit -qm "docs: explain the .worktrees layout"' } })
+	check('a commit message that merely mentions the lane passes', messageOnly.nextCalled, messageOnly.decision?.reason)
+	const messagePlusPath = await gate({ agent: MAIN, name: 'pwsh', arguments: { command: 'git commit -qm "wip" -- .worktrees/login/app.js' } })
+	check('a lane path argument beside a message is still denied', messagePlusPath.decision?.kind === 'deny', messagePlusPath.decision?.reason)
 }
 
 // --- gate: the Team-only wait_agent -----------------------------------------------
