@@ -4,6 +4,22 @@ All notable changes to this bundle. Rationale for each decision lives in `DEVLOG
 the short form. Dates are omitted on purpose — the project is developed in a single continuous line
 and `DEVLOG.md` carries the ordering.
 
+## 1.1.12 — a dispatch is a hand-over, not background work
+
+Three shipped texts told the coordinator that the child "works while the conversation continues", which
+reads as permission to keep working after a dispatch — the habit that produced the re-dispatches and the
+work-area polling in the first place. All three now end the turn:
+
+- the routing audit's task state: "Any write/modify MUST be delegated — a dispatch is a hand-over, not
+  background work: say in one line what you dispatched, then end the turn; the child's settlement
+  notice opens the next one."
+- the `wait_agent` denial reason: "dispatch, end the turn, and let that notice open the next one."
+- the coordinator manual's gate bullet: "Dispatch, then end the turn — never wait."
+
+Two freshness guards keep the retirement honest: no shipped surface may reintroduce "does not wait",
+"conversation continues" or "keep working", and the protocol and the manual must agree on the
+end-the-turn rule. The manual's dispatch route step `4. **End the turn.**` was already correct.
+
 ## 1.1.11 — the gate stops trusting the wrong population, the arrow becomes a cut, and the bundle names both silent conflicts
 
 Four changes from a live orchestrating session: three holes it exposed, one hardening of this
