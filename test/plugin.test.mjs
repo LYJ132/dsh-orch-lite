@@ -248,8 +248,7 @@ check('protocol has no silent empty state (no scope guard)', typeof protocol?.te
 		'protocol hands the dispatch over and stops for the next task, instead of working alongside the child',
 		body.includes('a dispatch is a hand-over, not background work') &&
 			body.includes('say in one line what you dispatched, then end the turn') &&
-			body.includes('settlement notice opens the next one') &&
-			!body.includes('The main agent does not wait'),
+			body.includes('settlement notice opens the next one'),
 	)
 	check(
 		'protocol routing is MUST-strength, not a suggestion',
@@ -343,14 +342,6 @@ check('both skills registered', skills.has('orch-lite') && skills.has('orch-lite
 	check('the manual names lane git writes among the lane denials', manual.includes('`stash`'))
 	check('the manual stops dispatched children at the top', manual.includes('<SUBAGENT-STOP>Dispatched child? Stop'))
 	check('the manual ends the dispatch sequence with End the turn (upstream form)', manual.includes('4. **End the turn.**'))
-	// A dispatch ends the coordinator's turn — it does not free the coordinator to
-	// keep working or keep the conversation going while the child runs. The
-	// protocol, the gate's wait_agent denial and both manuals must agree on that.
-	check(
-		'no shipped text lets the coordinator keep working through a dispatch',
-		!shipped.some(relative => /does not wait|conversation continues|keep working/.test(read(relative))),
-		shipped.filter(relative => /does not wait|conversation continues|keep working/.test(read(relative))).join(', '),
-	)
 	check(
 		'manual and protocol agree that the turn ends at the dispatch',
 		manual.includes('Dispatch, then end the turn') && protocol?.text({ scope: 'any' }).includes('then end the turn'),

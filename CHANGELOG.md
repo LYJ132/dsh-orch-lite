@@ -4,6 +4,15 @@ All notable changes to this bundle. Rationale for each decision lives in `DEVLOG
 the short form. Dates are omitted on purpose — the project is developed in a single continuous line
 and `DEVLOG.md` carries the ordering.
 
+## 1.1.13 — the suite states the rule, it does not police wording
+
+v1.1.12 added a guard that scanned every shipped file for three English phrases ("does not wait",
+"conversation continues", "keep working") and failed if any appeared. It is gone. A phrase blacklist
+rejects future wording that contains the words while missing the idea, and it cannot tell a forbidden
+sentence from a legitimate one that quotes it — the rule is already pinned positively instead: the
+protocol, the manual and the `wait_agent` denial reason are each asserted to say that the turn ends at
+the dispatch.
+
 ## 1.1.12 — a dispatch is a hand-over, not background work
 
 Three shipped texts told the coordinator that the child "works while the conversation continues", which
