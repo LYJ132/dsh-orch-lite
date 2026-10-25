@@ -4,15 +4,6 @@ All notable changes to this bundle. Rationale for each decision lives in `DEVLOG
 the short form. Dates are omitted on purpose — the project is developed in a single continuous line
 and `DEVLOG.md` carries the ordering.
 
-## 1.1.13 — the suite states the rule, it does not police wording
-
-v1.1.12 added a guard that scanned every shipped file for three English phrases ("does not wait",
-"conversation continues", "keep working") and failed if any appeared. It is gone. A phrase blacklist
-rejects future wording that contains the words while missing the idea, and it cannot tell a forbidden
-sentence from a legitimate one that quotes it — the rule is already pinned positively instead: the
-protocol, the manual and the `wait_agent` denial reason are each asserted to say that the turn ends at
-the dispatch.
-
 ## 1.1.12 — a dispatch is a hand-over, not background work
 
 Three shipped texts told the coordinator that the child "works while the conversation continues", which
@@ -25,9 +16,11 @@ work-area polling in the first place. All three now end the turn:
 - the `wait_agent` denial reason: "dispatch, end the turn, and let that notice open the next one."
 - the coordinator manual's gate bullet: "Dispatch, then end the turn — never wait."
 
-Two freshness guards keep the retirement honest: no shipped surface may reintroduce "does not wait",
-"conversation continues" or "keep working", and the protocol and the manual must agree on the
-end-the-turn rule. The manual's dispatch route step `4. **End the turn.**` was already correct.
+What the suite pins is the positive rule: the protocol, the manual and the `wait_agent` denial reason
+must each say that the turn ends at the dispatch, and the protocol and the manual must agree on it. A
+guard that scanned every shipped file for the three phrases above was considered and dropped — a phrase
+blacklist rejects future wording by vocabulary instead of meaning, and cannot tell a forbidden sentence
+from one that quotes it. The manual's dispatch route step `4. **End the turn.**` was already correct.
 
 ## 1.1.11 — the gate stops trusting the wrong population, the arrow becomes a cut, and the bundle names both silent conflicts
 
