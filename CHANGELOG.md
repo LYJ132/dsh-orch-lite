@@ -4,6 +4,16 @@ All notable changes to this bundle. Rationale for each decision lives in `DEVLOG
 the short form. Dates are omitted on purpose — the project is developed in a single continuous line
 and `DEVLOG.md` carries the ordering.
 
+## 1.1.13 — branch-forks are coordinators, not workers; push is a user action
+
+The last build (0.2.1-rc.5) introduced a new session header shape: UI "continue this session" forks carry `parentSession` with NO `origin` and the in-memory fork header omits `delegationDepth`. The old rule `depth undefined && parentSession → child` classified exactly that as a worker, leaking the hint into coordinator sessions AND failing open the gate for the entire session (lane denies, push deny, wait_agent denial — all silently off). Verified against 173 persisted headers on this build: 10/173 ordinary sessions are branch forks; the orchestrator session itself is one of them.
+
+Fix: classify by `origin === 'subagent'` (the only value the validator accepts, written only by the delegation path); the numeric depth >= 1 fallback is kept for legacy logs. A branch-root fixture asserts that such sessions are denied at the lane and receive no hint.
+
+Also fixes protocol wording around integration/push: bookkeeping explicitly lists `orch_tool` merge among allowed actions ("local integration needs no integrator dispatch"), and states that pushing is the user's action at any size — report the command and stop, never dispatch a runner.
+
+Tests: 273/273.
+
 ## 1.1.12 — a dispatch is a hand-over, not background work
 
 Three shipped texts told the coordinator that the child "works while the conversation continues", which
