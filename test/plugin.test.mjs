@@ -166,11 +166,18 @@ const gate = async (exec) => {
 	return { decision, nextCalled }
 }
 const MAIN = { session: { header: { id: 'main-1', cwd: 'REPLACED', agentPreset: 'orch-lite', delegationDepth: 0 } } }
-const CHILD = { session: { header: { id: 'child-1', cwd: 'REPLACED', agentPreset: 'orch-lite', delegationDepth: 1, parentSession: 'main-1' } } }
+// A delegated child: `origin: 'subagent'` is the discriminator the platform
+// itself uses; the depth fallback covers legacy logs. See classifyAgent.
+const CHILD = { session: { header: { id: 'child-1', cwd: 'REPLACED', agentPreset: 'orch-lite', origin: 'subagent', delegationDepth: 1, parentSession: 'main-1' } } }
 // A Team-lead session carries a parentSession header too, but its
 // delegationDepth is 0 — the hint ("you are a dispatched worker") and the
 // gate must NOT treat it as a child. See classifyAgent.
 const LEAD = { session: { header: { id: 'lead-1', cwd: 'REPLACED', agentPreset: 'orch-lite', delegationDepth: 0, parentSession: 'team-root' } } }
+// A UI branch ("continue this session"): forked from another session, so it
+// carries parentSession and isSeeded — but no origin, and in memory no
+// delegationDepth either. It is a coordinator: the gate must run for it, not
+// fail open. Verified against 10/173 persisted headers on 0.2.1-rc.5.
+const BRANCH = { session: { header: { id: 'branch-1', cwd: 'REPLACED', agentPreset: 'orch-lite', parentSession: 'main-1', isSeeded: true } } }
 
 // -------------------------------------------------------------------- fixture
 
@@ -178,6 +185,7 @@ const root = mkdtempSync(join(tmpdir(), 'orch-test-'))
 MAIN.session.header.cwd = root
 CHILD.session.header.cwd = root
 LEAD.session.header.cwd = root
+BRANCH.session.header.cwd = root
 const git = (args, cwd = root) =>
 	new Promise((resolve, reject) => {
 		execFile('git', args, { cwd, env: { ...process.env, GIT_CONFIG_COUNT: '0' } }, (error, stdout, stderr) =>
@@ -928,6 +936,17 @@ check('no registration warnings', warnings.length === 0, warnings.join(' | '))
 {
 	const w = await gate({ agent: LEAD, name: 'write', arguments: { file_path: '.worktrees/login/app.js', content: 'y' } })
 	check('a Team lead (depth 0) writing into a worker lane is denied', w.decision?.kind === 'deny', w.decision?.reason)
+}
+
+// --- gate: a UI branch-root (parentSession, no origin, no in-memory depth) is a coordinator
+
+{
+	const w = await gate({ agent: BRANCH, name: 'write', arguments: { file_path: '.worktrees/login/app.js', content: 'y' } })
+	check('a branch-root writing into a worker lane is denied', w.decision?.kind === 'deny', w.decision?.reason)
+	const injectedBranch = []
+	const fakeBranch = { session: { header: { id: 'fresh-branch', cwd: root, agentPreset: 'orch-lite', parentSession: 'fresh-main', isSeeded: true } }, inject: m => injectedBranch.push(m) }
+	await emit('agent/created', { agent: fakeBranch, source: 'startup' })
+	check('a branch-root gets no worker hint', !injectedBranch.some(m => (m.content?.[0]?.text ?? '').includes('dispatched worker')), JSON.stringify(injectedBranch.map(m => m.content?.[0]?.text?.slice(0, 60))))
 }
 
 // --- gate: children are not routed ------------------------------------------------
