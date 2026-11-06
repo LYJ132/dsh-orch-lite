@@ -1,0 +1,146 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+<meta name="theme-color" content="#0b1020">
+<title>Voice Party</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div id="app">
+
+  <header id="topbar">
+    <div class="brand">Voice<span>Party</span></div>
+    <div class="topright">
+      <button id="btnLang" class="chip" type="button">EN</button>
+      <span id="netPill" class="chip net" data-i18n="net.offline">离线</span>
+    </div>
+  </header>
+
+  <!-- ============ HOME ============ -->
+  <section class="screen" id="scrHome">
+    <div class="hero">
+      <div class="logo">Voice Party</div>
+      <p class="tagline" data-i18n="home.tagline">用声音控制小鸟，和朋友一起玩</p>
+    </div>
+    <div class="card">
+      <button class="btn primary" id="btnCreate" data-i18n="home.create">创建房间</button>
+      <div class="row">
+        <input id="inpCode" class="input" maxlength="6" autocapitalize="characters" autocomplete="off" spellcheck="false" placeholder="ABCD12" data-i18n-ph="home.codePh">
+        <button class="btn" id="btnJoin" data-i18n="home.join">加入</button>
+      </div>
+      <div class="sep"><span data-i18n="home.or">或</span></div>
+      <button class="btn ghost" id="btnSolo" data-i18n="home.solo">单人练习</button>
+      <label class="switch"><input type="checkbox" id="chkSim"><span data-i18n="home.sim">模拟输入（无麦克风）</span></label>
+    </div>
+    <p class="hint" data-i18n="home.hint">需要麦克风权限；iOS 请先点击按钮再授权。也可开启模拟输入试玩。</p>
+  </section>
+
+  <!-- ============ LOBBY ============ -->
+  <section class="screen" id="scrLobby">
+    <div class="card">
+      <div class="roomline">
+        <div>
+          <div class="label" data-i18n="lobby.roomCode">房间码</div>
+          <div class="code" id="roomCode">------</div>
+        </div>
+        <button class="btn small" id="btnShare" data-i18n="lobby.share">复制邀请链接</button>
+      </div>
+      <div class="label" data-i18n="lobby.mode">游戏模式</div>
+      <div class="modebtns" id="modeBtns">
+        <button class="modebtn" data-mode="solo"><b data-i18n="mode.solo">单人飞鸟</b><span data-i18n="mode.soloDesc">一个人控制</span></button>
+        <button class="modebtn" data-mode="dual"><b data-i18n="mode.dual">双人协作飞鸟</b><span data-i18n="mode.dualDesc">A 控上 / B 控下</span></button>
+      </div>
+      <div class="label" data-i18n="lobby.control">我的控制方式</div>
+      <div class="segbtns" id="ctlModeBtns">
+        <button data-ctl="pitch" data-i18n="ctl.pitch">音调</button>
+        <button data-ctl="volume" data-i18n="ctl.volume">音量</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="label" data-i18n="lobby.players">玩家</div>
+      <ul class="players" id="playerList"></ul>
+    </div>
+
+    <div class="card" id="designerCard">
+      <div class="row space">
+        <div class="label" data-i18n="designer.title">自定义关卡</div>
+        <span class="statechip" id="levelState">—</span>
+      </div>
+      <div class="canvaswrap">
+        <canvas id="designCanvas" width="360" height="640"></canvas>
+        <div class="drawtip" id="drawTip" data-i18n="designer.drawHint">用手指画一条通道中心线</div>
+      </div>
+      <div class="label" data-i18n="designer.difficulty">难度</div>
+      <div class="segbtns" id="diffBtns">
+        <button data-diff="easy" data-i18n="diff.easy">简单</button>
+        <button data-diff="normal" data-i18n="diff.normal">普通</button>
+        <button data-diff="hard" data-i18n="diff.hard">困难</button>
+      </div>
+      <div class="row wrap">
+        <button class="btn small" id="btnClear" data-i18n="designer.clear">清除</button>
+        <button class="btn small" id="btnRoll" data-i18n="designer.reroll">换一批障碍</button>
+        <button class="btn small primary" id="btnLock" data-i18n="designer.lock">锁定关卡</button>
+        <button class="btn small ghost" id="btnTakeDesign" data-i18n="designer.take">由我设计</button>
+      </div>
+      <div class="hint" id="levelMeta"></div>
+    </div>
+
+    <div class="card">
+      <button class="btn primary" id="btnReady" data-i18n="lobby.ready">准备</button>
+      <button class="btn" id="btnStart" data-i18n="lobby.start">开始游戏</button>
+      <button class="btn ghost" id="btnLeave" data-i18n="lobby.leave">离开房间</button>
+      <div class="hint" id="lobbyHint"></div>
+    </div>
+  </section>
+
+  <!-- ============ GAME ============ -->
+  <section class="screen game" id="scrGame">
+    <div class="stagewrap">
+      <canvas id="gameCanvas" width="360" height="640"></canvas>
+    </div>
+    <div class="hud">
+      <div class="hud-top">
+        <div class="scorebox"><b id="hudScore">0</b><span data-i18n="game.score">分</span></div>
+        <div class="hud-right">
+          <span class="chip" id="hudMode"></span>
+          <button class="chip" id="btnQuit" data-i18n="game.quit">退出</button>
+        </div>
+      </div>
+      <div class="hud-bottom">
+        <div class="ctlrow" id="ctlRow">
+          <button class="chip ctl" data-ctl="pitch" data-i18n="ctl.pitch">音调</button>
+          <button class="chip ctl" data-ctl="volume" data-i18n="ctl.volume">音量</button>
+        </div>
+        <div class="meters" id="meters"></div>
+      </div>
+      <div class="countdown" id="countdown"></div>
+      <div class="toast" id="toast"></div>
+      <div class="pauseveil" id="pauseVeil"><span data-i18n="game.paused">已暂停 · 点按继续</span></div>
+    </div>
+  </section>
+
+  <!-- ============ RESULT ============ -->
+  <section class="screen" id="scrResult">
+    <div class="card">
+      <h2 data-i18n="result.title">本局结果</h2>
+      <div class="stats" id="resultStats"></div>
+      <button class="btn primary" id="btnRetry" data-i18n="result.retry">再来一局</button>
+      <button class="btn" id="btnBackLobby" data-i18n="result.back">回到房间</button>
+      <p class="hint" id="resultNote"></p>
+    </div>
+  </section>
+
+</div>
+<script src="vendor/peerjs.min.js"></script>
+<script src="js/i18n.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/control.js"></script>
+<script src="js/level.js"></script>
+<script src="js/game.js"></script>
+<script src="js/room.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
