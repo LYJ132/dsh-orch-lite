@@ -54,7 +54,7 @@ see either fight — it reads a session, not the profile's bundle selection:
 
 | Bundle | What it does to an orch-lite session |
 |---|---|
-| `@deepseek-ai/dsh-experimental-agent-team-profile` | its layer disables `tool-subagent-control`, `tool-subagent-list-agents`, `tool-subagent` and `tool-subagent-fork`, so a running dispatched child reads as idle and cannot be continued |
+| `@deepseek-ai/dsh-experimental-agent-team-profile` | its layer disables `tool-subagent-control`, `tool-subagent` and `tool-subagent-fork`, so a running dispatched child reads as idle and cannot be continued |
 | `@deepseek-ai/dsh-experimental-tool-worktree` | adds a create-only `create_worktree` whose create path moves the session's own working directory into `.agents/worktrees/<branch>`, so later children inherit that cwd |
 
 The bundle therefore ships a browser half (`lib/client.js`, declared through `dsh.client` with

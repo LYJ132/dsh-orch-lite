@@ -4,6 +4,26 @@ All notable changes to this bundle. Rationale for each decision lives in `DEVLOG
 the short form. Dates are omitted on purpose — the project is developed in a single continuous line
 and `DEVLOG.md` carries the ordering.
 
+## 1.1.14 — re-baked the preset against 0.2.2-rc.1: the drifted `list-agents` row broke the whole mount
+
+A host upgrade (0.2.1-rc.x → 0.2.2-rc.1) removed the `./list-agents` subpath export from
+`@deepseek-ai/dsh-tool-subagent-control` — `list_agents` is now registered by the main entry itself. The
+baked preset patch still carried the row `tool-subagent-list-agents`, its import failed with
+`ERR_PACKAGE_PATH_NOT_EXPORTED`, and the new preset-registry mount rejects the ENTIRE preset on any
+failed audit row (`if (audit.failed.length > 0) throw ...`) — so selecting orch-lite gave nothing, not a
+preset missing one tool. This is the drift the generator header always warned about, arriving in force.
+
+Fix: re-ran `scripts/gen-preset.mjs` against the host's shipped `standard.patch.yml` from 0.2.2-rc.1.
+Beyond dropping the dead row, the re-bake pulls in the current baseline: `tool-fs` now carries
+`applyPatch: false`, `tool-subagent` config renamed `modelSelectionSettings` → `modelSelection` +
+`modelDiscovery`, `tool-plugin-manager` is now conditionally disabled by `profileContext`, and standard
+gained a `tool-plugin-market` row. The client-half banner text and README table that named four disabled
+Team tools now name the three the Team layer actually disables. The same class of failure independently
+broke the wsl-standard preset (duplicate `read_image`) — that lives in `dsh-wsl-workspace` and needs the
+same re-bake there.
+
+Tests: 273/273.
+
 ## 1.1.13 — branch-forks are coordinators, not workers; push is a user action
 
 The last build (0.2.1-rc.5) introduced a new session header shape: UI "continue this session" forks carry `parentSession` with NO `origin` and the in-memory fork header omits `delegationDepth`. The old rule `depth undefined && parentSession → child` classified exactly that as a worker, leaking the hint into coordinator sessions AND failing open the gate for the entire session (lane denies, push deny, wait_agent denial — all silently off). Verified against 173 persisted headers on this build: 10/173 ordinary sessions are branch forks; the orchestrator session itself is one of them.

@@ -4,6 +4,37 @@ Decision history and rationale for this plugin. Plugin code, skills, prompts,
 and tool messages carry only current rules and runtime facts; the "why we did
 it this way" lives here.
 
+## v1.1.14 — a host upgrade proved the drift warning: one dead row kills the whole mount
+
+The generator header says "Re-run the generator when DSH updates `standard` — this
+list drifts silently otherwise." It drifted, and the failure was not silent: DSH
+0.2.2-rc.1 removed the `./list-agents` subpath export from
+`@deepseek-ai/dsh-tool-subagent-control` (the `list_agents` tool now ships from the
+package's main entry). The baked row's import threw `ERR_PACKAGE_PATH_NOT_EXPORTED`,
+the fiber never started, and the preset-registry's mount audit treats ANY failed row
+as a failed preset (`if (audit.failed.length > 0) throw new Error(...)`). Selecting
+orch-lite therefore refused the entire preset — not degraded, gone. The same class
+of failure hit `dsh-wsl-workspace`'s `wsl-standard` variant independently
+(duplicate `read_image`), so the audit behavior is a pattern, not an accident:
+a baked composition is a hard dependency on the host baseline it was baked from.
+
+Two consequences carried into practice:
+
+1. **Re-bake on every host upgrade is release-blocking, not optional.** The
+   regenerate dry-run (`node scripts/gen-preset.mjs <extracted standard.patch.yml> out.yml`)
+   is the check; the anchors (the `plugins:` line, the `tool-plugin-manager` row)
+   survived 0.2.2-rc.1 unchanged, so the script needed no modification.
+2. **The banner's tool list must track the Team layer, not history.** The 0.2.2-rc.1
+   Team profile disables three rows (`tool-subagent-control`, `tool-subagent`,
+   `tool-subagent-fork`) — the fourth name the banner carried (`tool-subagent-list-agents`)
+   no longer exists anywhere; listing it promised the user a restore that cannot happen.
+   The client copy and README table now name three.
+
+Baseline pulled in by the re-bake: `tool-fs` gained `applyPatch: false`, the subagent
+model config split into `modelSelection`/`modelDiscovery`, `tool-plugin-manager` became
+conditionally disabled by `profileContext`, and standard gained a `tool-plugin-market`
+row. The patch now matches what the host ships.
+
 ## v1.1.11 — `depends_on`: the declaration's arrow becomes a branch cut
 
 The orchestration declaration could say `A → B`, and nothing tied that edge to the

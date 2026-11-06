@@ -626,9 +626,10 @@ check('both skills registered', skills.has('orch-lite') && skills.has('orch-lite
 		text.includes('create_worktree') && text.includes("moves the session's own working directory"),
 	)
 	check(
-		'the Team copy states the disabled:true overrides and the four restored tools',
+		'the Team copy states the disabled:true overrides and the three restored tools',
 		text.includes('disabled:true overrides') &&
-			['tool-subagent-control', 'tool-subagent-list-agents', 'tool-subagent', 'tool-subagent-fork'].every(name => text.includes(name)),
+			['tool-subagent-control', 'tool-subagent', 'tool-subagent-fork'].every(name => text.includes(name)) &&
+			!text.includes('tool-subagent-list-agents'),
 	)
 	check('the Team copy says child listing and continuation need those tools', text.includes('child listing and continuation need'))
 	check(
