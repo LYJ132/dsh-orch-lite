@@ -1,0 +1,42 @@
+name: Deploy Voice Party demo to Pages
+
+on:
+  push:
+    branches: ["voice-party"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "voice-party-pages"
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Pages
+        id: pages
+        uses: actions/configure-pages@v5
+        with:
+          # The repo had no Pages site yet: let the action create it (public
+          # repos can self-enable through the workflow's GITHUB_TOKEN).
+          enablement: true
+
+      - name: Upload artifact (the demo folder is the site root)
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./voice-party
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
